@@ -394,7 +394,13 @@ function OnlineGame({ roomId, player, initialWord, onBack }) {
     if (!me || me.status !== 'playing') return;
     if (guessed.has(letter)) return;
 
-    const word    = room.word;
+    // Guard against local win/lost computed before Firestore round-trips
+    const wordNow  = room.word;
+    const localWrongs = [...guessed].filter((l) => !wordNow.includes(l)).length;
+    const localWon    = [...wordNow].every((l) => guessed.has(l));
+    if (localWon || localWrongs >= MAX_WRONG) return;
+
+    const word    = wordNow;
     const next    = new Set([...guessed, letter]);
     const correct = word.includes(letter);
     const wrongs  = [...next].filter((l) => !word.includes(l)).length;
@@ -448,7 +454,7 @@ function OnlineGame({ roomId, player, initialWord, onBack }) {
   }
 
   // ── Round over countdown ──
-  if (room.status === 'round_over' && countdown !== null) {
+  if (room.status === 'round_over') {
     const p1Won  = room.p1?.status === 'won';
     const p2Won  = room.p2?.status === 'won';
     const bothL  = room.p1?.status === 'lost' && room.p2?.status === 'lost';
@@ -472,7 +478,7 @@ function OnlineGame({ roomId, player, initialWord, onBack }) {
               : p2Won ? `⚡ J2 adivinó — +1 a J2`
               : ''}
           </Text>
-          <Text style={[s.countdown, { color: AMBER }]}>{countdown}</Text>
+          <Text style={[s.countdown, { color: AMBER }]}>{countdown ?? '…'}</Text>
           <Text style={s.waitingText}>Siguiente ronda…</Text>
         </View>
       </View>
@@ -493,20 +499,20 @@ function OnlineGame({ roomId, player, initialWord, onBack }) {
   const word      = room.word || initialWord;
   const me        = room[player]  || { score: 0, guessed: [], status: 'playing' };
   const opp       = room[opponent]|| { score: 0, guessed: [], status: 'playing' };
-  const myDone    = me.status !== 'playing';
   const wrongs    = [...guessed].filter((l) => !word.includes(l)).length;
   const won       = me.status === 'won' || (word && [...word].every((l) => guessed.has(l)));
   const lost      = me.status === 'lost' || wrongs >= MAX_WRONG;
+  const myDone    = me.status !== 'playing' || won || lost;
   const pct       = (MAX_WRONG - wrongs) / MAX_WRONG;
   const barColor  = pct > 0.6 ? GREEN : pct > 0.3 ? AMBER : RED;
 
-  const oppGuessed = new Set(opp.guessed || []);
   const oppWrongs  = opp.guessed ? opp.guessed.filter((l) => !word.includes(l)).length : 0;
   const oppPct     = (MAX_WRONG - oppWrongs) / MAX_WRONG;
   const oppBarColor = oppPct > 0.6 ? GREEN : oppPct > 0.3 ? AMBER : RED;
 
   return (
     <ScrollView
+      style={{ flex: 1, backgroundColor: BG }}
       contentContainerStyle={[s.gameRoot, { paddingHorizontal: 14 }]}
       keyboardShouldPersistTaps="handled"
     >
