@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, memoryLocalCache } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyD5jgDiOOKbOoGKX8SOHCdnJ2OirUD_k10',
@@ -11,4 +11,11 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+
+// memoryLocalCache: deshabilita la persistencia offline.
+// Sin esto el SDK encola escrituras indefinidamente cuando no puede
+// conectar a los servidores de Firebase (promesa nunca resuelve/rechaza).
+export const db = initializeFirestore(app, {
+  localCache: memoryLocalCache(),
+  experimentalForceLongPolling: true,
+});
