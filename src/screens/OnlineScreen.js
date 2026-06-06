@@ -135,20 +135,18 @@ function CreateRoomScreen({ onBack, onGameReady }) {
   const [roomId]             = useState(generateRoomId);
   const [ready, setReady]    = useState(false);
   const [errorMsg, setError] = useState(null);
-  const unsubRef  = useRef(null);
-  const timeoutRef= useRef(null);
+  const unsubRef = useRef(null);
 
   function setup(rid) {
     setReady(false);
     setError(null);
 
-    timeoutRef.current = setTimeout(() => {
-      setError('Sin conexión con Firebase. Revisa tu internet o las reglas de Firestore.');
-    }, 12000);
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject({ code: 'timeout', message: 'Tiempo agotado' }), 10000)
+    );
 
-    createRoom(rid)
+    Promise.race([createRoom(rid), timeout])
       .then(() => {
-        clearTimeout(timeoutRef.current);
         setReady(true);
         unsubRef.current = subscribeToRoom(rid, (data) => {
           if (data.status === 'playing') {
@@ -158,14 +156,23 @@ function CreateRoomScreen({ onBack, onGameReady }) {
         });
       })
       .catch((e) => {
-        clearTimeout(timeoutRef.current);
-        setError(e?.message ?? 'Error al crear la sala.');
+        const code = e?.code ?? '';
+        const msg  = e?.message ?? '';
+        if (code === 'timeout' || msg === 'Tiempo agotado') {
+          setError('Firebase no responde (timeout).\nCódigo: timeout');
+        } else if (code.includes('permission') || code.includes('PERMISSION_DENIED')) {
+          setError('Acceso denegado por reglas de Firestore.\nCódigo: ' + code);
+        } else if (code.includes('unavailable') || code.includes('UNAVAILABLE')) {
+          setError('Firestore no disponible. ¿Base de datos creada?\nCódigo: ' + code);
+        } else {
+          setError((msg || code || 'Error desconocido') + (code ? '\nCódigo: ' + code : ''));
+        }
       });
   }
 
   useEffect(() => {
     setup(roomId);
-    return () => { unsubRef.current?.(); clearTimeout(timeoutRef.current); };
+    return () => { unsubRef.current?.(); };
   }, []);
 
   return (
