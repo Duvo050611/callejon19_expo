@@ -29,12 +29,19 @@ export async function createRoom(roomId) {
 // ─── Join room (Player 2) ─────────────────────────────────────────────────────
 export async function joinRoom(roomId) {
   const ref = doc(db, 'rooms', roomId);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) throw new Error('Sala no encontrada.');
-  const d = snap.data();
-  if (d.status !== 'waiting') throw new Error('La sala ya está en juego o no existe.');
-  await updateDoc(ref, { status: 'playing', 'p2.status': 'playing' });
-  return d.word;
+
+  // Retry up to 5 times with 800 ms gap — creator may still be writing
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const d = snap.data();
+      if (d.status !== 'waiting') throw new Error('La sala ya está en juego o no existe.');
+      await updateDoc(ref, { status: 'playing', 'p2.status': 'playing' });
+      return d.word;
+    }
+    if (attempt < 4) await new Promise((r) => setTimeout(r, 800));
+  }
+  throw new Error('Sala no encontrada. Verifica el código e intenta de nuevo.');
 }
 
 // ─── Update my game state on every guess ─────────────────────────────────────

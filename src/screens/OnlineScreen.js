@@ -132,24 +132,40 @@ function LobbyScreen({ onBack, onCreate, onJoin }) {
 // ─── Create room ──────────────────────────────────────────────────────────────
 function CreateRoomScreen({ onBack, onGameReady }) {
   const { contentW } = useSizes();
-  const [roomId]   = useState(generateRoomId);
-  const [status, setStatus] = useState('creating'); // creating | waiting | error
-  const unsubRef = useRef(null);
+  const [roomId]             = useState(generateRoomId);
+  const [ready, setReady]    = useState(false);
+  const [errorMsg, setError] = useState(null);
+  const unsubRef  = useRef(null);
+  const timeoutRef= useRef(null);
 
-  useEffect(() => {
-    createRoom(roomId)
+  function setup(rid) {
+    setReady(false);
+    setError(null);
+
+    timeoutRef.current = setTimeout(() => {
+      setError('Sin conexión con Firebase. Revisa tu internet o las reglas de Firestore.');
+    }, 12000);
+
+    createRoom(rid)
       .then(() => {
-        setStatus('waiting');
-        unsubRef.current = subscribeToRoom(roomId, (data) => {
+        clearTimeout(timeoutRef.current);
+        setReady(true);
+        unsubRef.current = subscribeToRoom(rid, (data) => {
           if (data.status === 'playing') {
             unsubRef.current?.();
-            onGameReady(roomId, 'p1', data.word);
+            onGameReady(rid, 'p1', data.word);
           }
         });
       })
-      .catch(() => setStatus('error'));
+      .catch((e) => {
+        clearTimeout(timeoutRef.current);
+        setError(e?.message ?? 'Error al crear la sala.');
+      });
+  }
 
-    return () => unsubRef.current?.();
+  useEffect(() => {
+    setup(roomId);
+    return () => { unsubRef.current?.(); clearTimeout(timeoutRef.current); };
   }, []);
 
   return (
@@ -161,10 +177,16 @@ function CreateRoomScreen({ onBack, onGameReady }) {
 
         <Text style={[s.sectionTitle, { marginTop: 24 }]}>TU SALA</Text>
 
-        {status === 'creating' && <ActivityIndicator color={P1} style={{ marginTop: 40 }} />}
-
-        {status === 'waiting' && (
+        {errorMsg ? (
           <>
+            <Text style={[s.errorText, { marginTop: 32 }]}>{errorMsg}</Text>
+            <TouchableOpacity style={[s.replayBtn, { marginTop: 20, width: contentW }]} onPress={onBack}>
+              <Text style={s.replayText}>VOLVER</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            {/* QR shown immediately — room writes in background */}
             <View style={s.qrBox}>
               <QRCode
                 value={roomId}
@@ -178,14 +200,12 @@ function CreateRoomScreen({ onBack, onGameReady }) {
             <Text style={s.roomHint}>Comparte este código o QR con tu rival</Text>
 
             <View style={s.waitingRow}>
-              <ActivityIndicator color={P1} size="small" />
-              <Text style={s.waitingText}>Esperando al rival…</Text>
+              <ActivityIndicator color={ready ? P1 : '#404040'} size="small" />
+              <Text style={s.waitingText}>
+                {ready ? 'Esperando al rival…' : 'Conectando con Firebase…'}
+              </Text>
             </View>
           </>
-        )}
-
-        {status === 'error' && (
-          <Text style={s.errorText}>Error al crear la sala. Intenta de nuevo.</Text>
         )}
       </View>
     </View>
