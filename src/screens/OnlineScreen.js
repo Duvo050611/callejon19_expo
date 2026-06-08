@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -42,44 +44,78 @@ const ROW1    = 10;
 
 function useSizes() {
   const { width, height } = useWindowDimensions();
-  const contentW = Math.min(width - 28, 520);
+  const isWeb    = Platform.OS === 'web';
+  const contentW = Math.min(width - 28, isWeb ? 520 : width - 28);
+  const safeTop  = Platform.OS === 'ios' ? 44 : 24;
+  const availH   = height - safeTop;
   const keyW     = Math.max(22, Math.floor((contentW - KEY_GAP * (ROW1 - 1)) / ROW1));
-  const keyH     = Math.min(44, keyW + 10);
-  return { width, height, contentW, keyW, keyH };
+  const keyH     = Math.min(46, Math.max(34, keyW + 10));
+  const kbdH     = 3 * keyH + 2 * (KEY_GAP + 2);
+  const fixedH   = 44 + 38 + 26 + 56 + 24 + 60;
+  const gallowsH = Math.min(Math.max(100, availH - kbdH - fixedH), isWeb ? 200 : availH * 0.32);
+  const gallowsW = Math.min(contentW, Math.round(gallowsH * (220 / 190)));
+  const gsc      = gallowsW / 220;
+  const tileW    = Math.max(22, Math.min(36, Math.floor((contentW - 6 * 11) / 12)));
+  const tileH    = tileW + 6;
+  return { width, height, contentW, availH, keyW, keyH, gallowsW, gallowsH, gsc, tileW, tileH };
 }
 
-// ─── Mini hangman (opponent view) ────────────────────────────────────────────
-function MiniHangman({ wrongCount }) {
-  const bar = (l, t, w, h) => (
-    <View style={{ position: 'absolute', backgroundColor: '#555', left: l, top: t, width: w, height: h }} />
+// ─── Gallows (mismo que HangmanScreen) ───────────────────────────────────────
+function Gallows({ wrongCount }) {
+  const { gallowsW, gallowsH, gsc, contentW } = useSizes();
+
+  const bar = (ox, oy, ow, oh) => (
+    <View style={{
+      backgroundColor: '#c0c0c0', position: 'absolute',
+      left: ox * gsc, top: oy * gsc,
+      width: Math.max(1.5, ow * gsc), height: Math.max(1.5, oh * gsc),
+    }} />
   );
-  const sc = 0.45;
+  const limb = (ox, oy, ow, deg) => (
+    <View style={{
+      position: 'absolute', left: ox * gsc, top: oy * gsc,
+      width: ow * gsc, height: Math.max(1.5, 2 * gsc),
+      backgroundColor: '#c0c0c0', transform: [{ rotate: `${deg}deg` }],
+    }} />
+  );
+
+  const pct      = (MAX_WRONG - wrongCount) / MAX_WRONG;
+  const barColor = pct > 0.6 ? GREEN : pct > 0.3 ? AMBER : RED;
+
   return (
-    <View style={{ width: 96 * sc, height: 90 * sc, position: 'relative' }}>
-      {bar(4*sc, 82*sc, 36*sc, 1.5)}
-      {bar(20*sc, 4*sc, 1.5, 78*sc)}
-      {bar(20*sc, 4*sc, 44*sc, 1.5)}
-      {bar(62*sc, 4*sc, 1.5, 16*sc)}
-      {wrongCount >= 1 && (
-        <View style={{
-          position: 'absolute', left: 53*sc, top: 20*sc,
-          width: 11*sc, height: 11*sc, borderRadius: 6*sc,
-          borderWidth: 1.5, borderColor: '#888',
-        }} />
-      )}
-      {wrongCount >= 2 && bar(62*sc, 31*sc, 1.5, 20*sc)}
-      {wrongCount >= 3 && (
-        <View style={{ position:'absolute', left:50*sc, top:36*sc, width:16*sc, height:1.5, backgroundColor:'#888', transform:[{rotate:'135deg'}] }} />
-      )}
-      {wrongCount >= 4 && (
-        <View style={{ position:'absolute', left:64*sc, top:36*sc, width:16*sc, height:1.5, backgroundColor:'#888', transform:[{rotate:'45deg'}] }} />
-      )}
-      {wrongCount >= 5 && (
-        <View style={{ position:'absolute', left:48*sc, top:55*sc, width:20*sc, height:1.5, backgroundColor:'#888', transform:[{rotate:'127deg'}] }} />
-      )}
-      {wrongCount >= 6 && (
-        <View style={{ position:'absolute', left:64*sc, top:55*sc, width:20*sc, height:1.5, backgroundColor:'#888', transform:[{rotate:'53deg'}] }} />
-      )}
+    <View style={{ width: contentW, alignItems: 'center', marginBottom: 4 }}>
+      <View style={[s.corner, { top: 0, left: (contentW - gallowsW) / 2, borderTopWidth: 2, borderLeftWidth: 2 }]} />
+      <View style={[s.corner, { top: 0, right: (contentW - gallowsW) / 2, borderTopWidth: 2, borderRightWidth: 2 }]} />
+      <View style={[s.corner, { top: gallowsH - 14, left: (contentW - gallowsW) / 2, borderBottomWidth: 2, borderLeftWidth: 2 }]} />
+      <View style={[s.corner, { top: gallowsH - 14, right: (contentW - gallowsW) / 2, borderBottomWidth: 2, borderRightWidth: 2 }]} />
+
+      <View style={[s.canvas, { width: gallowsW, height: gallowsH }]}>
+        {bar(10, 184, 80, 2)}
+        {bar(46, 10, 2, 174)}
+        {bar(46, 10, 100, 2)}
+        {bar(144, 10, 2, 34)}
+        {wrongCount >= 1 && (
+          <View style={{
+            position: 'absolute', left: 133 * gsc, top: 43 * gsc,
+            width: 24 * gsc, height: 24 * gsc, borderRadius: 12 * gsc,
+            borderWidth: Math.max(1.5, 2 * gsc), borderColor: '#c0c0c0',
+          }} />
+        )}
+        {wrongCount >= 2 && bar(144, 67, 2, 44)}
+        {wrongCount >= 3 && limb(116, 80, 36, 135)}
+        {wrongCount >= 4 && limb(148, 80, 36, 45)}
+        {wrongCount >= 5 && limb(112, 122, 42, 127)}
+        {wrongCount >= 6 && limb(148, 122, 42, 53)}
+      </View>
+
+      <View style={{ width: gallowsW, marginTop: 8 }}>
+        <View style={s.lifeBarBg}>
+          <View style={[s.lifeBarFill, { width: `${pct * 100}%`, backgroundColor: barColor }]} />
+        </View>
+        <Text style={[s.lifeLabel, { color: barColor }]}>
+          {MAX_WRONG - wrongCount} / {MAX_WRONG} VIDAS
+        </Text>
+      </View>
     </View>
   );
 }
@@ -142,7 +178,7 @@ function CreateRoomScreen({ onBack, onGameReady }) {
     setError(null);
 
     const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject({ code: 'timeout', message: 'Tiempo agotado' }), 10000)
+      setTimeout(() => reject({ code: 'timeout' }), 30000)
     );
 
     Promise.race([createRoom(rid), timeout])
@@ -158,14 +194,14 @@ function CreateRoomScreen({ onBack, onGameReady }) {
       .catch((e) => {
         const code = e?.code ?? '';
         const msg  = e?.message ?? '';
-        if (code === 'timeout' || msg === 'Tiempo agotado') {
-          setError('Firebase no responde (timeout).\nCódigo: timeout');
-        } else if (code.includes('permission') || code.includes('PERMISSION_DENIED')) {
-          setError('Acceso denegado por reglas de Firestore.\nCódigo: ' + code);
-        } else if (code.includes('unavailable') || code.includes('UNAVAILABLE')) {
-          setError('Firestore no disponible. ¿Base de datos creada?\nCódigo: ' + code);
+        if (code === 'timeout') {
+          setError('Tiempo agotado conectando a Firebase.\nVerifica tu internet y que la base de datos Firestore esté creada en Firebase Console.');
+        } else if (code.includes('permission') || msg.includes('permission') || msg.includes('PERMISSION_DENIED')) {
+          setError('Acceso denegado.\nVerifica las reglas en Firebase Console → Firestore → Rules.');
+        } else if (code.includes('unavailable') || msg.includes('unavailable')) {
+          setError('Firestore no disponible.\n¿Creaste la base de datos en Firebase Console?');
         } else {
-          setError((msg || code || 'Error desconocido') + (code ? '\nCódigo: ' + code : ''));
+          setError((msg || code || 'Error desconocido'));
         }
       });
   }
@@ -344,8 +380,9 @@ function JoinRoomScreen({ onBack, onGameReady }) {
 
 // ─── Online game ──────────────────────────────────────────────────────────────
 function OnlineGame({ roomId, player, initialWord, onBack }) {
-  const { contentW, keyW, keyH } = useSizes();
-  const opponent = player === 'p1' ? 'p2' : 'p1';
+  const sizes     = useSizes();
+  const contentW  = sizes.contentW;
+  const opponent  = player === 'p1' ? 'p2' : 'p1';
 
   const [room, setRoom]       = useState(null);
   const [guessed, setGuessed] = useState(new Set());
@@ -370,10 +407,11 @@ function OnlineGame({ roomId, player, initialWord, onBack }) {
     }
   }, [room?.word]);
 
-  // Detect round end
+  // Detect round end — solo P1 puntúa (REST API no tiene transacciones)
   useEffect(() => {
     if (!room) return;
     if (room.status !== 'playing') return;
+    if (player !== 'p1') return;
     const me  = room[player];
     const opp = room[opponent];
     if (!me || !opp) return;
@@ -523,120 +561,112 @@ function OnlineGame({ roomId, player, initialWord, onBack }) {
   }
 
   // ── Main game ──
+  const { keyW, keyH, tileW, tileH } = sizes;
+
   const word      = room.word || initialWord;
-  const me        = room[player]  || { score: 0, guessed: [], status: 'playing' };
-  const opp       = room[opponent]|| { score: 0, guessed: [], status: 'playing' };
-  const wrongs    = [...guessed].filter((l) => !word.includes(l)).length;
-  const won       = me.status === 'won' || (word && [...word].every((l) => guessed.has(l)));
-  const lost      = me.status === 'lost' || wrongs >= MAX_WRONG;
-  const myDone    = me.status !== 'playing' || won || lost;
-  const pct       = (MAX_WRONG - wrongs) / MAX_WRONG;
-  const barColor  = pct > 0.6 ? GREEN : pct > 0.3 ? AMBER : RED;
+  const me        = room[player]   || { score: 0, guessed: [], status: 'playing' };
+  const opp       = room[opponent] || { score: 0, guessed: [], status: 'playing' };
+  const myColor   = player   === 'p1' ? P1 : P2;
+  const oppColor  = opponent === 'p1' ? P1 : P2;
 
-  const oppWrongs  = opp.guessed ? opp.guessed.filter((l) => !word.includes(l)).length : 0;
-  const oppPct     = (MAX_WRONG - oppWrongs) / MAX_WRONG;
-  const oppBarColor = oppPct > 0.6 ? GREEN : oppPct > 0.3 ? AMBER : RED;
+  const wrongLetters = [...guessed].filter((l) => !word.includes(l));
+  const wrongs       = wrongLetters.length;
+  const won          = me.status === 'won'  || (word && [...word].every((l) => guessed.has(l)));
+  const lost         = me.status === 'lost' || wrongs >= MAX_WRONG;
+  const myDone       = me.status !== 'playing' || won || lost;
+  const over         = won || lost;
 
-  return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: BG }}
-      contentContainerStyle={[s.gameRoot, { paddingHorizontal: 14 }]}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View style={{ width: contentW, alignItems: 'center' }}>
+  const oppWrongs = opp.guessed ? opp.guessed.filter((l) => !word.includes(l)).length : 0;
+  const oppDone   = opp.status === 'won' || opp.status === 'lost';
+
+  const inner = (
+    <View style={[s.gameInner, { paddingHorizontal: 14 }]}>
+      <View style={{ width: contentW, flex: 1, alignItems: 'center', justifyContent: 'space-between' }}>
 
         {/* Header */}
         <View style={[s.header, { width: contentW }]}>
           <TouchableOpacity onPress={onBack} style={s.backWrap}>
-            <Text style={s.backText}>← SALIR</Text>
+            <Text style={s.backArrow}>←</Text>
+            <Text style={s.backText}>SALIR</Text>
           </TouchableOpacity>
-          <Text style={s.gameTitle}>RONDA {room.round}</Text>
-          <Text style={s.headerMode}>ONLINE</Text>
+          <Text style={s.gameTitle}>AHORCADO</Text>
+          <Text style={s.headerMode}>ONLINE · R{room.round}</Text>
         </View>
 
-        {/* Scores */}
-        <View style={[s.onlineScores, { width: contentW }]}>
-          <View style={s.onlineScoreChip}>
-            <Text style={[s.osLabel, { color: player==='p1'?P1:P2 }]}>
-              TÚ (J{player==='p1'?1:2})
-            </Text>
-            <Text style={s.osNum}>{me.score}</Text>
-            <Text style={s.osOf}>/ {WIN_SCORE}</Text>
-          </View>
-          <View style={s.osDivider} />
-          <View style={s.onlineScoreChip}>
-            <Text style={[s.osLabel, { color: opponent==='p1'?P1:P2 }]}>
-              RIVAL (J{opponent==='p1'?1:2})
-            </Text>
-            <Text style={s.osNum}>{opp.score}</Text>
-            <Text style={s.osOf}>/ {WIN_SCORE}</Text>
-          </View>
+        {/* Player banner — igual al turn banner offline */}
+        <View style={[s.turnBanner, { borderColor: myColor, backgroundColor: myColor + '18', width: contentW }]}>
+          <View style={[s.turnDot, { backgroundColor: myDone ? '#333' : myColor }]} />
+          <Text style={[s.turnLabel, { color: myDone ? '#444' : myColor }]}>
+            TÚ · J{player === 'p1' ? 1 : 2}
+          </Text>
+          <Text style={[s.tScore, { color: myColor }]}>{me.score}</Text>
+          <Text style={s.tSep}>|</Text>
+          <Text style={[s.tScore, { color: oppColor }]}>{opp.score}</Text>
+          <Text style={[s.turnLabel, { color: oppDone ? '#444' : oppColor, textAlign: 'right' }]}>
+            J{opponent === 'p1' ? 1 : 2} · RIVAL
+          </Text>
+          <View style={[s.turnDot, { backgroundColor: oppDone ? '#333' : oppColor }]} />
         </View>
 
-        {/* My life bar */}
-        <View style={{ width: contentW, marginBottom: 4 }}>
-          <View style={s.lifeBarBg}>
-            <View style={[s.lifeBarFill, { width: `${pct*100}%`, backgroundColor: barColor }]} />
+        {/* Rival strip compacto */}
+        <View style={[s.oppStrip, { width: contentW }]}>
+          <Text style={[s.oppStripLabel, { color: oppColor }]}>RIVAL</Text>
+          <View style={s.oppStripDots}>
+            {Array.from({ length: MAX_WRONG }).map((_, i) => (
+              <View key={i} style={[s.oppDot, { backgroundColor: i < oppWrongs ? RED : '#1e1e1e' }]} />
+            ))}
           </View>
-          <Text style={[s.lifeLabel, { color: barColor }]}>
-            {MAX_WRONG - wrongs} / {MAX_WRONG} VIDAS
+          <Text style={s.oppStripStatus}>
+            {opp.status === 'won'  ? '¡Adivinó! 🎉'
+           : opp.status === 'lost' ? 'Perdió 💀'
+           : opp.status === 'waiting' ? 'Conectando…'
+           : `${oppWrongs}/${MAX_WRONG} err`}
           </Text>
         </View>
 
-        {/* Word tiles */}
+        {/* Gallows completo (mis errores) */}
+        <Gallows wrongCount={wrongs} />
+
+        {/* Categoría */}
         <Text style={s.categoryTag}>🐾  ANIMALES</Text>
+
+        {/* Tiles */}
         <View style={[s.wordStrip, { width: contentW }]}>
           {[...(word || '')].map((letter, i) => {
             const hit  = guessed.has(letter);
-            const miss = lost && !hit;
+            const miss = over && !hit;
             return (
-              <View key={i} style={[s.tile, hit && s.tileHit, miss && s.tileMiss]}>
-                <Text style={[s.tileLetter, hit && s.tileLetterHit, miss && s.tileLetterMiss]}>
-                  {hit || lost ? letter : ''}
+              <View key={i} style={[s.tile, { width: tileW, height: tileH }, hit && s.tileHit, miss && s.tileMiss]}>
+                <Text style={[s.tileLetter, { fontSize: Math.max(11, tileW * 0.52) }, hit && s.tileLetterHit, miss && s.tileLetterMiss]}>
+                  {hit || over ? letter : ''}
                 </Text>
               </View>
             );
           })}
         </View>
 
-        {/* My status */}
-        {myDone && (
-          <Text style={[s.myStatus, { color: won ? GREEN : RED }]}>
-            {won ? '¡Adivinaste! 🎉' : '¡Perdiste esta ronda! 💀'}
-          </Text>
-        )}
-
-        {/* Opponent mini view */}
-        <View style={[s.oppBox, { width: contentW }]}>
-          <MiniHangman wrongCount={oppWrongs} />
-          <View style={{ flex: 1, gap: 6 }}>
-            <Text style={[s.oppLabel, { color: opponent==='p1'?P1:P2 }]}>
-              RIVAL · J{opponent==='p1'?1:2}
-            </Text>
-            <View style={s.lifeBarBg}>
-              <View style={[s.lifeBarFill, { width: `${oppPct*100}%`, backgroundColor: oppBarColor }]} />
-            </View>
-            <Text style={s.oppStatus}>
-              {opp.status === 'waiting' ? 'Conectando…'
-                : opp.status === 'won'  ? '¡Adivinó! 🎉'
-                : opp.status === 'lost' ? 'Perdió 💀'
-                : `Letras: ${opp.guessed?.filter(l => word.includes(l)).length ?? 0} · Errores: ${oppWrongs}`}
-            </Text>
-          </View>
+        {/* Letras falladas */}
+        <View style={s.wrongRow}>
+          {wrongLetters.length > 0 && (
+            <>
+              <Text style={s.wrongLabel}>FALLADAS: </Text>
+              <Text style={s.wrongLetters}>{wrongLetters.join(' · ')}</Text>
+            </>
+          )}
         </View>
 
-        {/* Wrong letters */}
-        {[...guessed].filter(l => !word.includes(l)).length > 0 && (
-          <View style={s.wrongRow}>
-            <Text style={s.wrongLabel}>FALLADAS: </Text>
-            <Text style={s.wrongLetters}>
-              {[...guessed].filter(l => !word.includes(l)).join(' · ')}
+        {/* Estado al terminar mi ronda */}
+        {myDone && (
+          <View style={[s.overBadge, { borderColor: won ? GREEN : RED, width: contentW }]}>
+            <Text style={s.overEmoji}>{won ? '🎉' : '💀'}</Text>
+            <Text style={[s.overTitle, { color: won ? GREEN : RED }]}>
+              {won ? '¡ADIVINASTE!' : '¡PERDISTE!'}
             </Text>
           </View>
         )}
 
-        {/* Keyboard */}
-        {!myDone && (
+        {/* Teclado / espera rival */}
+        {!myDone ? (
           <View style={s.kbd}>
             {KEYBOARD_ROWS.map((row, ri) => (
               <View key={ri} style={[s.kbdRow, { gap: KEY_GAP }]}>
@@ -661,16 +691,32 @@ function OnlineGame({ roomId, player, initialWord, onBack }) {
               </View>
             ))}
           </View>
-        )}
-
-        {myDone && (
-          <View style={[s.waitingOpponent, { width: contentW }]}>
+        ) : (
+          <View style={[s.waitingRow, { justifyContent: 'center', marginTop: 8 }]}>
             <ActivityIndicator color="#333" size="small" />
             <Text style={s.waitingText}>Esperando al rival…</Text>
           </View>
         )}
 
       </View>
+    </View>
+  );
+
+  if (Platform.OS !== 'web') {
+    return (
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={s.gameRoot}>{inner}</View>
+      </TouchableWithoutFeedback>
+    );
+  }
+  return (
+    <ScrollView
+      style={{ flex: 1, backgroundColor: BG }}
+      contentContainerStyle={s.gameRootScroll}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="none"
+    >
+      {inner}
     </ScrollView>
   );
 }
@@ -696,10 +742,11 @@ export default function OnlineScreen({ onBack }) {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
+  // Screens compartidas
   centered:   { flex: 1, backgroundColor: BG, alignItems: 'center', justifyContent: 'center', padding: 14 },
-  gameRoot:   { flexGrow: 1, backgroundColor: BG, alignItems: 'center', paddingTop: 50, paddingBottom: 40 },
 
   backWrap:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  backArrow:  { color: '#3a3a3a', fontSize: 18 },
   backText:   { color: '#3a3a3a', fontSize: 11, fontWeight: '800', letterSpacing: 3 },
 
   brandSub:   { color: '#3a3a3a', fontSize: 11, letterSpacing: 5, fontWeight: '700', marginBottom: 4 },
@@ -719,35 +766,23 @@ const s = StyleSheet.create({
   modeDesc:  { color: '#404040', fontSize: 12 },
   modeChev:  { fontSize: 22, fontWeight: '300' },
 
-  ruleText: { color: '#2a2a2a', fontSize: 12, letterSpacing: 1, marginTop: 32, lineHeight: 22 },
-
+  ruleText:     { color: '#2a2a2a', fontSize: 12, letterSpacing: 1, marginTop: 32, lineHeight: 22 },
   sectionTitle: { color: '#3a3a3a', fontSize: 11, fontWeight: '900', letterSpacing: 5 },
 
   qrBox: {
-    backgroundColor: CARD, borderRadius: 16,
-    padding: 20, marginTop: 24,
+    backgroundColor: CARD, borderRadius: 16, padding: 20, marginTop: 24,
     borderWidth: 1, borderColor: BORDER,
   },
-  roomCode: {
-    color: '#f0f0f0', fontSize: 32, fontWeight: '900',
-    letterSpacing: 12, marginTop: 16,
-  },
-  roomHint: { color: '#383838', fontSize: 12, marginTop: 8, letterSpacing: 1 },
-  waitingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 24 },
+  roomCode:    { color: '#f0f0f0', fontSize: 32, fontWeight: '900', letterSpacing: 12, marginTop: 16 },
+  roomHint:    { color: '#383838', fontSize: 12, marginTop: 8, letterSpacing: 1 },
+  waitingRow:  { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 24 },
   waitingText: { color: '#383838', fontSize: 12, letterSpacing: 2 },
-  errorText: { color: RED, fontSize: 14, textAlign: 'center', marginTop: 20 },
+  errorText:   { color: RED, fontSize: 13, textAlign: 'center', marginTop: 20 },
 
-  scanOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  scanFrame: {
-    width: 220, height: 220,
-    borderWidth: 2, borderColor: '#fff',
-    borderRadius: 16,
-  },
-  scanHint: { color: '#fff', marginTop: 16, fontSize: 14, letterSpacing: 2 },
-  scanBack: { position: 'absolute', top: 56, left: 20 },
+  scanOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  scanFrame:   { width: 220, height: 220, borderWidth: 2, borderColor: '#fff', borderRadius: 16 },
+  scanHint:    { color: '#fff', marginTop: 16, fontSize: 14, letterSpacing: 2 },
+  scanBack:    { position: 'absolute', top: 56, left: 20 },
 
   codeInput: {
     backgroundColor: CARD, color: '#f0f0f0',
@@ -756,51 +791,71 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: BORDER, width: '100%', textAlign: 'center',
   },
 
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  gameTitle: { flex: 1, textAlign: 'center', color: '#1e1e1e', fontSize: 12, fontWeight: '900', letterSpacing: 6 },
-  headerMode: { color: '#3a3a3a', fontSize: 11, fontWeight: '800', letterSpacing: 3 },
+  replayBtn:  { borderWidth: 1, borderColor: '#303030', paddingVertical: 14, borderRadius: 4, alignItems: 'center' },
+  replayText: { color: '#f0f0f0', fontSize: 12, fontWeight: '900', letterSpacing: 6 },
 
-  onlineScores: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: CARD, borderRadius: 10, padding: 12,
-    borderWidth: 1, borderColor: BORDER, marginBottom: 12,
-  },
-  onlineScoreChip: { flex: 1, flexDirection: 'row', alignItems: 'baseline', gap: 6 },
-  osLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 2 },
-  osNum:   { color: '#f0f0f0', fontSize: 24, fontWeight: '900' },
-  osOf:    { color: '#383838', fontSize: 12 },
-  osDivider: { width: 1, height: 30, backgroundColor: BORDER, marginHorizontal: 10 },
+  // Pantalla de juego — igual que offline 2P
+  gameRoot:      { flex: 1, backgroundColor: BG, alignItems: 'center', justifyContent: 'center' },
+  gameRootScroll:{ flexGrow: 1, backgroundColor: BG, alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
+  gameInner:     { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' },
 
-  lifeBarBg: { height: 3, backgroundColor: '#181818', borderRadius: 2, overflow: 'hidden' },
+  header:     { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  gameTitle:  { flex: 1, textAlign: 'center', color: '#1e1e1e', fontSize: 13, fontWeight: '900', letterSpacing: 6 },
+  headerMode: { color: '#3a3a3a', fontSize: 11, fontWeight: '800', letterSpacing: 2 },
+
+  // Gallows
+  corner: { position: 'absolute', width: 14, height: 14, borderColor: '#222' },
+  canvas: { backgroundColor: '#101010', borderRadius: 4, borderWidth: 1, borderColor: '#181818', position: 'relative', overflow: 'hidden' },
+  lifeBarBg:   { width: '100%', height: 3, backgroundColor: '#181818', borderRadius: 2, overflow: 'hidden' },
   lifeBarFill: { height: '100%', borderRadius: 2 },
-  lifeLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 2, marginTop: 3 },
+  lifeLabel:   { fontSize: 9, fontWeight: '700', letterSpacing: 2, marginTop: 4, textAlign: 'center' },
 
+  // Turn banner (igual offline 2P)
+  turnBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1, borderRadius: 10,
+    paddingVertical: 8, paddingHorizontal: 14, marginBottom: 8,
+  },
+  turnDot:   { width: 6, height: 6, borderRadius: 3 },
+  turnLabel: { flex: 1, fontSize: 11, fontWeight: '900', letterSpacing: 2 },
+  tScore:    { fontSize: 11, fontWeight: '800' },
+  tSep:      { color: '#2a2a2a', fontSize: 12 },
+
+  // Rival strip compacto
+  oppStrip: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginBottom: 6, paddingHorizontal: 4,
+  },
+  oppStripLabel:  { fontSize: 9, fontWeight: '900', letterSpacing: 3 },
+  oppStripDots:   { flexDirection: 'row', gap: 3 },
+  oppDot:         { width: 7, height: 7, borderRadius: 4 },
+  oppStripStatus: { color: '#404040', fontSize: 10, letterSpacing: 1 },
+
+  // Tiles
   categoryTag: { color: '#606060', fontSize: 10, letterSpacing: 4, fontWeight: '700', marginVertical: 8 },
-
-  wordStrip: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 5, marginBottom: 8 },
-  tile: { width: 30, height: 36, backgroundColor: '#101010', borderBottomWidth: 2, borderBottomColor: '#252525', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 2 },
-  tileHit:  { borderBottomColor: '#f0f0f0' },
-  tileMiss: { borderBottomColor: RED },
-  tileLetter: { fontSize: 17, fontWeight: '900', color: 'transparent' },
+  wordStrip:   { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 5, marginBottom: 8 },
+  tile:        { backgroundColor: '#101010', borderBottomWidth: 2, borderBottomColor: '#252525', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 2 },
+  tileHit:     { borderBottomColor: '#f0f0f0' },
+  tileMiss:    { borderBottomColor: RED },
+  tileLetter:  { fontWeight: '900', color: 'transparent' },
   tileLetterHit:  { color: '#f0f0f0' },
   tileLetterMiss: { color: RED },
 
-  myStatus: { fontSize: 16, fontWeight: '800', letterSpacing: 2, marginBottom: 10 },
-
-  oppBox: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: CARD, borderRadius: 10, padding: 12,
-    borderWidth: 1, borderColor: BORDER, marginBottom: 8,
-  },
-  oppLabel:  { color: '#505050', fontSize: 10, fontWeight: '800', letterSpacing: 2 },
-  oppStatus: { color: '#383838', fontSize: 11, letterSpacing: 1 },
-
-  wrongRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  wrongLabel: { color: '#303030', fontSize: 9, fontWeight: '800', letterSpacing: 3 },
+  wrongRow:     { flexDirection: 'row', alignItems: 'center', marginBottom: 6, height: 20 },
+  wrongLabel:   { color: '#303030', fontSize: 9, fontWeight: '800', letterSpacing: 3 },
   wrongLetters: { color: '#3a3a3a', fontSize: 11, fontWeight: '700', letterSpacing: 3 },
 
-  kbd: { alignItems: 'center', gap: 6, marginTop: 10 },
-  kbdRow: { flexDirection: 'row' },
+  // Fin de ronda
+  overBadge: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    borderWidth: 1, borderRadius: 10, paddingVertical: 10, marginBottom: 8,
+  },
+  overEmoji: { fontSize: 24 },
+  overTitle: { fontSize: 18, fontWeight: '900', letterSpacing: 4 },
+
+  // Teclado
+  kbd:         { alignItems: 'center', gap: 6, marginTop: 8 },
+  kbdRow:      { flexDirection: 'row' },
   key: {
     backgroundColor: CARD, borderRadius: 6,
     borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1,
@@ -808,29 +863,20 @@ const s = StyleSheet.create({
     borderBottomWidth: 3, borderBottomColor: '#000',
     alignItems: 'center', justifyContent: 'center',
   },
-  keyOk:  { backgroundColor: '#0d1f0d', borderTopColor: '#1a3a1a' },
-  keyBad: { backgroundColor: '#160808', borderTopColor: '#2e1010' },
+  keyOk:       { backgroundColor: '#0d1f0d', borderTopColor: '#1a3a1a' },
+  keyBad:      { backgroundColor: '#160808', borderTopColor: '#2e1010' },
   keyText:     { color: '#505050', fontWeight: '800' },
   keyTextUsed: { color: '#202020' },
   keyTextOk:   { color: GREEN },
 
-  waitingOpponent: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16, justifyContent: 'center' },
-
-  overEmoji: { fontSize: 52, marginBottom: 8 },
-  overTitle: { fontSize: 28, fontWeight: '900', letterSpacing: 6, marginBottom: 20 },
+  // Pantallas de resultado
   scoreCards: { flexDirection: 'row', gap: 12, marginBottom: 16, width: '100%' },
-  scoreCard: {
-    alignItems: 'center', backgroundColor: CARD,
-    borderRadius: 12, paddingVertical: 16, borderWidth: 1,
-  },
-  scNum: { fontSize: 11, fontWeight: '900', letterSpacing: 3, marginBottom: 6 },
-  scScore: { fontSize: 36, fontWeight: '900', color: '#f0f0f0', lineHeight: 38 },
-  scSub: { fontSize: 9, color: '#383838', letterSpacing: 2 },
+  scoreCard:  { alignItems: 'center', backgroundColor: CARD, borderRadius: 12, paddingVertical: 16, borderWidth: 1 },
+  scNum:      { fontSize: 11, fontWeight: '900', letterSpacing: 3, marginBottom: 6 },
+  scScore:    { fontSize: 36, fontWeight: '900', color: '#f0f0f0', lineHeight: 38 },
+  scSub:      { fontSize: 9, color: '#383838', letterSpacing: 2 },
 
   roundOverTitle: { color: '#383838', fontSize: 12, fontWeight: '900', letterSpacing: 6, marginBottom: 16 },
-  roundResult: { color: '#505050', fontSize: 13, letterSpacing: 1, marginTop: 12, marginBottom: 8 },
-  countdown: { fontSize: 72, fontWeight: '900', letterSpacing: 4 },
-
-  replayBtn: { borderWidth: 1, borderColor: '#303030', paddingVertical: 14, borderRadius: 4, alignItems: 'center' },
-  replayText: { color: '#f0f0f0', fontSize: 12, fontWeight: '900', letterSpacing: 6 },
+  roundResult:    { color: '#505050', fontSize: 13, letterSpacing: 1, marginTop: 12, marginBottom: 8 },
+  countdown:      { fontSize: 72, fontWeight: '900', letterSpacing: 4 },
 });

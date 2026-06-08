@@ -1,36 +1,33 @@
-import {
-  doc, setDoc, updateDoc, getDoc,
-  onSnapshot, runTransaction, serverTimestamp,
-} from 'firebase/firestore';
 import { db } from './config';
+import {
+  doc, setDoc, getDoc, updateDoc, onSnapshot,
+} from 'firebase/firestore';
 import { randomWord } from '../data/words';
 
 export function generateRoomId() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let id = '';
+  for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  return id;
 }
 
-// ─── Create room (Player 1) ───────────────────────────────────────────────────
 export async function createRoom(roomId) {
   const word = randomWord();
   await setDoc(doc(db, 'rooms', roomId), {
     word,
-    status: 'waiting',   // waiting | playing | round_over | finished
+    status: 'waiting',
     round: 1,
     scored: false,
     winner: null,
     nextWord: null,
-    createdAt: serverTimestamp(),
     p1: { score: 0, guessed: [], status: 'playing' },
     p2: { score: 0, guessed: [], status: 'waiting' },
   });
   return word;
 }
 
-// ─── Join room (Player 2) ─────────────────────────────────────────────────────
 export async function joinRoom(roomId) {
   const ref = doc(db, 'rooms', roomId);
-
-  // Retry up to 5 times with 800 ms gap — creator may still be writing
   for (let attempt = 0; attempt < 5; attempt++) {
     const snap = await getDoc(ref);
     if (snap.exists()) {
@@ -41,73 +38,61 @@ export async function joinRoom(roomId) {
     }
     if (attempt < 4) await new Promise((r) => setTimeout(r, 800));
   }
-  throw new Error('Sala no encontrada. Verifica el código e intenta de nuevo.');
+  throw new Error('Sala no encontrada. Verifica el código.');
 }
 
-// ─── Update my game state on every guess ─────────────────────────────────────
 export async function updateMyState(roomId, player, guessed, status) {
   await updateDoc(doc(db, 'rooms', roomId), {
-    [`${player}.guessed`]: [...guessed],
-    [`${player}.status`]: status,   // 'playing' | 'won' | 'lost'
+    [`${player}.guessed`]: guessed,
+    [`${player}.status`]: status,
   });
 }
 
-// ─── Score round (transactional — both clients can call, only one runs) ───────
+// Solo lo llama P1 — evita condición de carrera sin necesitar transacción
 export async function processRoundEnd(roomId) {
-  const ref = doc(db, 'rooms', roomId);
-  await runTransaction(db, async (tx) => {
-    const snap = await tx.get(ref);
-    if (!snap.exists()) return;
-    const d = snap.data();
+  const snap = await getDoc(doc(db, 'rooms', roomId));
+  if (!snap.exists()) return;
+  const data = snap.data();
+  if (data.scored) return;
+  if (data.p1.status === 'playing' || data.p2.status === 'playing') return;
+  if (data.p2.status === 'waiting') return;
 
-    // Guards
-    if (d.scored) return;
-    if (d.p1.status === 'playing' || d.p2.status === 'playing') return;
-    if (d.p2.status === 'waiting') return;
+  const p1Won    = data.p1.status === 'won';
+  const p2Won    = data.p2.status === 'won';
+  const bothLost = data.p1.status === 'lost' && data.p2.status === 'lost';
 
-    const p1Won    = d.p1.status === 'won';
-    const p2Won    = d.p2.status === 'won';
-    const bothLost = d.p1.status === 'lost' && d.p2.status === 'lost';
+  const p1s = data.p1.score + (p1Won || bothLost ? 1 : 0);
+  const p2s = data.p2.score + (p2Won || bothLost ? 1 : 0);
 
-    let p1s = d.p1.score + (p1Won ? 1 : bothLost ? 1 : 0);
-    let p2s = d.p2.score + (p2Won ? 1 : bothLost ? 1 : 0);
+  const gameOver = p1s >= 5 || p2s >= 5;
+  const winner   = p1s >= 5 && p2s >= 5 ? 'draw' : p1s >= 5 ? 'p1' : p2s >= 5 ? 'p2' : null;
 
-    const gameOver = p1s >= 5 || p2s >= 5;
-    const winner   = p1s >= 5 && p2s >= 5
-      ? 'draw' : p1s >= 5 ? 'p1' : p2s >= 5 ? 'p2' : null;
-
-    tx.update(ref, {
-      scored: true,
-      'p1.score': p1s,
-      'p2.score': p2s,
-      ...(gameOver
-        ? { status: 'finished', winner }
-        : { status: 'round_over', nextWord: randomWord(), round: d.round + 1 }),
-    });
+  await updateDoc(doc(db, 'rooms', roomId), {
+    scored: true,
+    'p1.score': p1s,
+    'p2.score': p2s,
+    ...(gameOver
+      ? { status: 'finished', winner }
+      : { status: 'round_over', nextWord: randomWord(), round: data.round + 1 }),
   });
 }
 
-// ─── Advance to next round (called by P1 after countdown) ────────────────────
 export async function startNextRound(roomId) {
-  const ref = doc(db, 'rooms', roomId);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return;
-  const d = snap.data();
-  if (d.status !== 'round_over') return;
-
-  await updateDoc(ref, {
-    word: d.nextWord,
+  const snap = await getDoc(doc(db, 'rooms', roomId));
+  if (!snap.exists() || snap.data().status !== 'round_over') return;
+  const { nextWord } = snap.data();
+  await updateDoc(doc(db, 'rooms', roomId), {
+    word: nextWord,
     status: 'playing',
     scored: false,
     nextWord: null,
     'p1.guessed': [],
-    'p1.status': 'playing',
+    'p1.status':  'playing',
     'p2.guessed': [],
-    'p2.status': 'playing',
+    'p2.status':  'playing',
   });
 }
 
-// ─── Real-time listener ───────────────────────────────────────────────────────
 export function subscribeToRoom(roomId, callback) {
   return onSnapshot(doc(db, 'rooms', roomId), (snap) => {
     if (snap.exists()) callback(snap.data());

@@ -11,7 +11,6 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
 const WORDS = [
   'TIBURON','GORILA','CONEJO','CAMELLO','DELFIN',
   'CANGURO','PALOMA','AGUILA','CIERVO','ABEJA',
