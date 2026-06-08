@@ -23,7 +23,7 @@ import {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MAX_WRONG  = 6;
-const WIN_SCORE  = 5;
+const WIN_SCORE  = 3;
 const RED        = '#e63946';
 const AMBER      = '#fbbf24';
 const GREEN      = '#4ade80';

@@ -64,8 +64,8 @@ export async function processRoundEnd(roomId) {
   const p1s = data.p1.score + (p1Won || bothLost ? 1 : 0);
   const p2s = data.p2.score + (p2Won || bothLost ? 1 : 0);
 
-  const gameOver = p1s >= 5 || p2s >= 5;
-  const winner   = p1s >= 5 && p2s >= 5 ? 'draw' : p1s >= 5 ? 'p1' : p2s >= 5 ? 'p2' : null;
+  const gameOver = p1s >= 3 || p2s >= 3;
+  const winner   = p1s >= 3 && p2s >= 3 ? 'draw' : p1s >= 3 ? 'p1' : p2s >= 3 ? 'p2' : null;
 
   await updateDoc(doc(db, 'rooms', roomId), {
     scored: true,
