@@ -109,7 +109,7 @@ const bar = StyleSheet.create({
 });
 
 // ─── Pantalla principal ───────────────────────────────────────────────────────
-export default function HydrationScreen({ onBack }) {
+export default function HydrationScreen() {
   const { width, height } = useWindowDimensions();
   const isWeb  = Platform.OS === 'web';
   // Tamaño del "wearable": cuadrado compacto centrado
@@ -445,11 +445,6 @@ export default function HydrationScreen({ onBack }) {
 
   return (
     <View style={s.root}>
-      {/* Botón salir */}
-      <TouchableOpacity style={s.exit} onPress={onBack}>
-        <Text style={s.exitText}>← SALIR</Text>
-      </TouchableOpacity>
-
       {/* Banner de error */}
       {error && (
         <View style={s.errorBanner}>
@@ -489,9 +484,6 @@ export default function HydrationScreen({ onBack }) {
 const s = StyleSheet.create({
   root:        { flex: 1, backgroundColor: BG, alignItems: 'center', justifyContent: 'center' },
   loading:     { color: TEXT, fontSize: 16 },
-
-  exit:        { position: 'absolute', top: Platform.OS === 'ios' ? 52 : 28, left: 16 },
-  exitText:    { color: MUTED, fontSize: 11, fontWeight: '800', letterSpacing: 3 },
 
   errorBanner: { backgroundColor: '#2d0a0a', borderRadius: 8, padding: 10, marginBottom: 8, maxWidth: 300 },
   errorText:   { color: RED, fontSize: 12, textAlign: 'center' },
