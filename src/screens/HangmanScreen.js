@@ -145,13 +145,18 @@ function Gallows({ wrongCount }) {
 const GREEN = '#4ade80';
 
 // ─── Menu ─────────────────────────────────────────────────────────────────────
-function MenuScreen({ onSelect, onOnline }) {
+function MenuScreen({ onSelect, onOnline, onBack }) {
   const { contentW } = useSizes();
   const titleSize = Math.min(52, contentW * 0.15);
 
   return (
     <View style={[st.menuRoot, { paddingHorizontal: H_PAD / 2 }]}>
       <View style={{ width: contentW }}>
+        {onBack && (
+          <TouchableOpacity onPress={onBack} style={{ marginBottom: 16 }}>
+            <Text style={{ color: '#2a2a2a', fontSize: 11, fontWeight: '800', letterSpacing: 3 }}>← INICIO</Text>
+          </TouchableOpacity>
+        )}
         <Text style={st.brandSub}>— EL JUEGO DEL —</Text>
         <Text style={[st.brandTitle, { fontSize: titleSize }]}>AHORCADO</Text>
         <View style={st.brandLine} />
@@ -408,7 +413,7 @@ function GameScreen({ word, mode, onBackToMenu }) {
 }
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
-export default function HangmanScreen({ onOnline }) {
+export default function HangmanScreen({ onOnline, onBack }) {
   const [phase, setPhase] = useState('menu');
   const [mode, setMode]   = useState(null);
   const [word, setWord]   = useState('');
@@ -416,7 +421,7 @@ export default function HangmanScreen({ onOnline }) {
   function start(m) { setMode(m); setWord(randomWord()); setPhase('playing'); }
   function back()   { setPhase('menu'); setMode(null); setWord(''); }
 
-  if (phase === 'menu') return <MenuScreen onSelect={start} onOnline={onOnline} />;
+  if (phase === 'menu') return <MenuScreen onSelect={start} onOnline={onOnline} onBack={onBack} />;
   return <GameScreen word={word} mode={mode} onBackToMenu={back} />;
 }
 
