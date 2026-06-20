@@ -1,159 +1,156 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  FlatList,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
+  FlatList, Platform, StyleSheet, Text,
+  TouchableOpacity, View, useWindowDimensions,
 } from 'react-native';
 import Svg, { Circle, G } from 'react-native-svg';
 
-// ─── Paleta ───────────────────────────────────────────────────────────────────
-const BG    = '#080808';
-const CARD  = '#0a1a24';
-const BLUE  = '#22d3ee';
+// ─── Tokens ───────────────────────────────────────────────────────────────────
+const BG    = '#020c14';
+const SURF  = '#071624';
+const CARD  = '#0b1e30';
+const LINE  = '#0e2840';
+const BLUE  = '#38bdf8';
 const DBLUE = '#0ea5e9';
-const DIM   = '#0f2a38';
-const TEXT  = '#e0f2fe';
-const MUTED = '#2a5060';
-const RED   = '#f87171';
-const GREEN = '#4ade80';
+const TEXT  = '#dde8f0';
+const SUB   = '#4a7a96';
+const MUTED = '#2a5070';
+const GHOST = '#0a1929';
+const GREEN = '#34d399';
 const AMBER = '#fbbf24';
+const RED   = '#f87171';
 
-const DEFAULT_GOAL = 2000;
+const TOP    = Platform.OS === 'ios' ? 52 : 28;
+const BOT    = Platform.OS === 'ios' ? 34 : 16;
+const GOAL_D = 2000;
+
 const TABS = [
-  { icon: '🏠', label: 'Inicio'     },
-  { icon: '💧', label: 'Registrar'  },
-  { icon: '🎯', label: 'Meta'       },
-  { icon: '📋', label: 'Historial'  },
-  { icon: '📊', label: 'Gráfica'    },
-  { icon: '⏰', label: 'Alerta'     },
+  { icon: '🏠', label: 'HOY'      },
+  { icon: '💧', label: 'AGREGAR'  },
+  { icon: '🎯', label: 'META'     },
+  { icon: '📋', label: 'REGISTRO' },
+  { icon: '📊', label: 'SEMANA'   },
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Utils ────────────────────────────────────────────────────────────────────
 function todayKey() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
-
-function formatTime(ts) {
+function fmtTime(ts) {
   const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
-
-function formatElapsed(secs) {
-  if (secs < 60)  return `${secs}s`;
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ${secs % 60}s`;
-  return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
+function fmtElapsed(sec) {
+  if (sec < 60)   return `${sec}s`;
+  if (sec < 3600) return `${Math.floor(sec/60)} min`;
+  return `${Math.floor(sec/3600)}h ${Math.floor((sec%3600)/60)}m`;
 }
-
-function last7Keys() {
-  const keys = [];
+function dateLabel() {
+  const DAYS   = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const d = new Date();
+  return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+function last7() {
+  const a = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    a.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
   }
-  return keys;
+  return a;
 }
 
-// ─── Círculo de progreso (SVG) ────────────────────────────────────────────────
-function CircleProgress({ current, goal, size }) {
-  const r    = (size - 24) / 2;
+// ─── Ring SVG ─────────────────────────────────────────────────────────────────
+function Ring({ current, goal, size }) {
+  const r    = (size - 32) / 2;
   const cx   = size / 2;
-  const cy   = size / 2;
   const circ = 2 * Math.PI * r;
   const pct  = Math.min(current / goal, 1);
-  const fill = pct >= 1 ? GREEN : pct >= 0.6 ? BLUE : pct >= 0.3 ? DBLUE : MUTED;
-
+  const done = pct >= 1;
+  const arc  = circ * pct;
   return (
     <Svg width={size} height={size}>
-      <G rotation="-90" origin={`${cx},${cy}`}>
-        <Circle cx={cx} cy={cy} r={r} stroke={DIM} strokeWidth={12} fill="none" />
-        <Circle
-          cx={cx} cy={cy} r={r}
-          stroke={fill} strokeWidth={12} fill="none"
-          strokeDasharray={`${circ * pct} ${circ}`}
-          strokeLinecap="round"
-        />
+      <G rotation="-90" origin={`${cx},${cx}`}>
+        <Circle cx={cx} cy={cx} r={r} stroke={LINE} strokeWidth={18} fill="none" />
+        {pct > 0 && (
+          <Circle cx={cx} cy={cx} r={r}
+            stroke={done ? GREEN : BLUE} strokeWidth={18} fill="none"
+            strokeDasharray={`${arc} ${circ}`} strokeLinecap="round"
+          />
+        )}
       </G>
     </Svg>
   );
 }
 
-// ─── Barra de gráfica ─────────────────────────────────────────────────────────
-function Bar({ value, goal, label, maxH }) {
-  const pct    = Math.min(value / goal, 1);
-  const height = Math.max(4, Math.round(pct * maxH));
-  const color  = pct >= 1 ? GREEN : pct >= 0.5 ? BLUE : MUTED;
-  const day    = label.slice(8); // DD
+// ─── Mini ring (header) ───────────────────────────────────────────────────────
+function MiniRing({ pct, done }) {
+  const r = 13; const circ = 2 * Math.PI * r;
   return (
-    <View style={bar.wrap}>
-      <Text style={bar.val}>{value > 0 ? `${value}` : ''}</Text>
-      <View style={[bar.col, { height: maxH, justifyContent: 'flex-end' }]}>
-        <View style={[bar.fill, { height, backgroundColor: color }]} />
-      </View>
-      <Text style={bar.label}>{day}</Text>
-    </View>
+    <Svg width={34} height={34}>
+      <G rotation="-90" origin="17,17">
+        <Circle cx="17" cy="17" r={r} stroke={LINE} strokeWidth={5} fill="none" />
+        {pct > 0 && (
+          <Circle cx="17" cy="17" r={r}
+            stroke={done ? GREEN : BLUE} strokeWidth={5} fill="none"
+            strokeDasharray={`${circ*pct} ${circ}`} strokeLinecap="round"
+          />
+        )}
+      </G>
+    </Svg>
   );
 }
-const bar = StyleSheet.create({
-  wrap:  { alignItems: 'center', gap: 4 },
-  val:   { color: MUTED, fontSize: 8, fontWeight: '700' },
-  col:   { width: 22, backgroundColor: DIM, borderRadius: 4 },
-  fill:  { width: '100%', borderRadius: 4 },
-  label: { color: MUTED, fontSize: 9, fontWeight: '700' },
-});
 
-// ─── Pantalla principal ───────────────────────────────────────────────────────
+// ─── Screen ───────────────────────────────────────────────────────────────────
 export default function HydrationScreen() {
-  const { width, height } = useWindowDimensions();
-  const isWeb  = Platform.OS === 'web';
-  // Tamaño del "wearable": cuadrado compacto centrado
-  const wSize  = Math.min(width, height, isWeb ? 300 : Math.min(width, 320));
+  const { width } = useWindowDimensions();
+  const W      = Math.min(width, 460);
+  const ringSz = Math.min(W * 0.65, 230);
 
-  const [tab,      setTab]      = useState(0);
-  const [log,      setLog]      = useState([]);   // [{id, ts, ml}] de hoy
-  const [goal,     setGoal]     = useState(DEFAULT_GOAL);
-  const [history,  setHistory]  = useState({});   // { dateKey: totalMl }
+  const [tab,       setTab]       = useState(0);
+  const [log,       setLog]       = useState([]);
+  const [goal,      setGoal]      = useState(GOAL_D);
+  const [history,   setHistory]   = useState({});
   const [lastDrink, setLastDrink] = useState(null);
-  const [elapsed,  setElapsed]  = useState(0);
-  const [loaded,   setLoaded]   = useState(false);
-  const [error,    setError]    = useState(null);
-  const timerRef = useRef(null);
+  const [elapsed,   setElapsed]   = useState(0);
+  const [loaded,    setLoaded]    = useState(false);
+  const [flash,     setFlash]     = useState(null);
+  const [error,     setError]     = useState(null);
+  const timerRef   = useRef(null);
+  const flashTimer = useRef(null);
 
-  // ── Carga desde AsyncStorage ───────────────────────────────────────────────
+  // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
-        const [rawGoal, rawLog, rawHist, rawLast] = await Promise.all([
+        const [rg, rl, rh, rd] = await Promise.all([
           AsyncStorage.getItem('hyd_goal'),
           AsyncStorage.getItem(`hyd_log_${todayKey()}`),
           AsyncStorage.getItem('hyd_history'),
           AsyncStorage.getItem('hyd_lastDrink'),
         ]);
-        if (rawGoal)  setGoal(parseInt(rawGoal, 10));
-        if (rawLog)   setLog(JSON.parse(rawLog));
-        if (rawHist)  setHistory(JSON.parse(rawHist));
-        if (rawLast)  setLastDrink(parseInt(rawLast, 10));
+        if (rg) setGoal(parseInt(rg, 10));
+        if (rl) setLog(JSON.parse(rl));
+        if (rh) setHistory(JSON.parse(rh));
+        if (rd) setLastDrink(parseInt(rd, 10));
       } catch (e) {
-        setError('Error al cargar datos: ' + e.message);
+        setError('Error al cargar: ' + e.message);
       } finally {
         setLoaded(true);
       }
     })();
   }, []);
 
-  // ── Guarda en AsyncStorage ────────────────────────────────────────────────
-  const save = useCallback(async (newLog, newGoal, newHistory, newLast) => {
+  // ── Persist ───────────────────────────────────────────────────────────────
+  async function persist(newLog, newGoal, newHist, newLast) {
     try {
       await Promise.all([
         AsyncStorage.setItem(`hyd_log_${todayKey()}`, JSON.stringify(newLog)),
         AsyncStorage.setItem('hyd_goal', String(newGoal)),
-        AsyncStorage.setItem('hyd_history', JSON.stringify(newHistory)),
+        AsyncStorage.setItem('hyd_history', JSON.stringify(newHist)),
         newLast != null
           ? AsyncStorage.setItem('hyd_lastDrink', String(newLast))
           : AsyncStorage.removeItem('hyd_lastDrink'),
@@ -162,11 +159,11 @@ export default function HydrationScreen() {
     } catch (e) {
       setError('Error al guardar: ' + e.message);
     }
-  }, []);
+  }
 
-  // ── Timer de alerta ───────────────────────────────────────────────────────
+  // ── Timer ─────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
+    clearInterval(timerRef.current);
     if (lastDrink == null) { setElapsed(0); return; }
     const tick = () => setElapsed(Math.floor((Date.now() - lastDrink) / 1000));
     tick();
@@ -174,172 +171,252 @@ export default function HydrationScreen() {
     return () => clearInterval(timerRef.current);
   }, [lastDrink]);
 
-  // ── Registrar vaso ────────────────────────────────────────────────────────
+  // ── Actions ───────────────────────────────────────────────────────────────
   function addWater(ml) {
-    const entry    = { id: Date.now(), ts: Date.now(), ml };
-    const newLog   = [entry, ...log];
-    const key      = todayKey();
-    const total    = newLog.reduce((s, e) => s + e.ml, 0);
-    const newHist  = { ...history, [key]: total };
-    setLog(newLog);
-    setHistory(newHist);
-    setLastDrink(entry.ts);
-    save(newLog, goal, newHist, entry.ts);
+    const ts     = Date.now();
+    const entry  = { id: ts, ts, ml };
+    const newLog = [entry, ...log];
+    const key    = todayKey();
+    const total  = newLog.reduce((s, e) => s + e.ml, 0);
+    const newH   = { ...history, [key]: total };
+    setLog(newLog); setHistory(newH); setLastDrink(ts);
+    persist(newLog, goal, newH, ts);
+    clearTimeout(flashTimer.current);
+    setFlash(ml);
+    flashTimer.current = setTimeout(() => setFlash(null), 1800);
   }
 
-  // ── Cambiar meta ──────────────────────────────────────────────────────────
   function changeGoal(delta) {
     const next = Math.max(500, Math.min(5000, goal + delta));
     setGoal(next);
-    save(log, next, history, lastDrink);
+    persist(log, next, history, lastDrink);
   }
 
-  // ── Borrar historial de hoy ───────────────────────────────────────────────
+  function setGoalPreset(val) {
+    setGoal(val);
+    persist(log, val, history, lastDrink);
+  }
+
   function clearToday() {
-    const key     = todayKey();
-    const newHist = { ...history, [key]: 0 };
-    setLog([]);
-    setHistory(newHist);
-    setLastDrink(null);
-    save([], goal, newHist, null);
+    const key  = todayKey();
+    const newH = { ...history, [key]: 0 };
+    setLog([]); setHistory(newH); setLastDrink(null);
+    persist([], goal, newH, null);
   }
 
   if (!loaded) {
-    return (
-      <View style={s.root}>
-        <Text style={s.loading}>Cargando…</Text>
-      </View>
-    );
+    return <View style={s.root}><Text style={s.loadTxt}>Cargando…</Text></View>;
   }
 
-  const today    = log.reduce((sum, e) => sum + e.ml, 0);
-  const pct      = Math.min(today / goal, 1);
-  const alertMin = lastDrink ? Math.floor(elapsed / 60) : null;
-  const alertOn  = alertMin != null && alertMin >= 60;
-  const keys7    = last7Keys();
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const today     = log.reduce((sum, e) => sum + e.ml, 0);
+  const pct       = Math.min(today / goal, 1);
+  const pctN      = Math.round(pct * 100);
+  const remaining = Math.max(0, goal - today);
+  const done      = pct >= 1;
+  const alertMin  = lastDrink ? Math.floor(elapsed / 60) : null;
+  const alertOn   = alertMin != null && alertMin >= 60;
+  const alertWarn = alertMin != null && alertMin >= 30 && !alertOn;
+  const alertClr  = alertOn ? RED : alertWarn ? AMBER : GREEN;
+  const keys7     = last7();
 
-  // ── Contenido de cada tab ─────────────────────────────────────────────────
-  const renderTab = () => {
+  // ── Tab content ───────────────────────────────────────────────────────────
+  const content = () => {
     switch (tab) {
 
-      // ── 0: Dashboard ───────────────────────────────────────────────────────
+      // HOY ──────────────────────────────────────────────────────────────────
       case 0: return (
-        <View style={s.tabContent}>
-          <View style={{ alignItems: 'center' }}>
-            <View style={s.circleWrap}>
-              <CircleProgress current={today} goal={goal} size={wSize * 0.62} />
-              <View style={s.circleCenter}>
-                <Text style={s.circleMain}>{today}</Text>
-                <Text style={s.circleSub}>ml</Text>
-                <Text style={[s.circlePct, { color: pct >= 1 ? GREEN : BLUE }]}>
-                  {Math.round(pct * 100)}%
+        <View style={s.tab}>
+          <Text style={s.dateStr}>{dateLabel()}</Text>
+
+          {/* Hero ring */}
+          <View style={s.ringWrap}>
+            <Ring current={today} goal={goal} size={ringSz} />
+            <View style={[s.ringInner, { width: ringSz, height: ringSz }]}>
+              <Text style={[s.ringNum, done && { color: GREEN }]}>
+                {today >= 1000 ? (today/1000).toFixed(1) : today}
+              </Text>
+              <Text style={s.ringUnit}>{today >= 1000 ? 'litros' : 'ml'}</Text>
+              <Text style={[s.ringPct, { color: done ? GREEN : pct > 0.5 ? BLUE : SUB }]}>
+                {pctN}%
+              </Text>
+            </View>
+          </View>
+
+          {/* Progress caption */}
+          <Text style={s.caption}>
+            {done ? '¡Meta alcanzada! 🎉' : `${remaining.toLocaleString()} ml para completar la meta`}
+          </Text>
+
+          {/* Alert strip */}
+          <View style={[s.strip, { borderColor: alertClr + '35', backgroundColor: alertClr + '0d' }]}>
+            <View style={[s.stripDot, { backgroundColor: alertClr }]} />
+            <Text style={[s.stripTxt, { color: alertClr }]}>
+              {lastDrink == null
+                ? 'Registra tu primer vaso'
+                : alertOn  ? `¡Bebe agua! Hace ${alertMin} min sin hidratarte`
+                : alertWarn ? `Pronto toca hidratarte — ${alertMin} min`
+                : `Último vaso hace ${fmtElapsed(elapsed)}`}
+            </Text>
+          </View>
+
+          {/* Quick add */}
+          <View style={s.quickRow}>
+            {[150, 250, 500].map(ml => (
+              <TouchableOpacity key={ml} activeOpacity={0.6}
+                style={[s.quickBtn, flash === ml && s.quickBtnLit]}
+                onPress={() => addWater(ml)}>
+                <Text style={s.quickDrop}>💧</Text>
+                <Text style={[s.quickVal, flash === ml && { color: BLUE }]}>+{ml}</Text>
+                <Text style={s.quickU}>ml</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Flash pill */}
+          {flash && (
+            <View style={s.pill}>
+              <Text style={s.pillTxt}>+{flash} ml registrados ✓</Text>
+            </View>
+          )}
+        </View>
+      );
+
+      // AGREGAR ──────────────────────────────────────────────────────────────
+      case 1: return (
+        <View style={s.tab}>
+          <View style={s.sHead}>
+            <Text style={s.sTag}>REGISTRAR AGUA</Text>
+            <Text style={s.sSub}>Selecciona la cantidad</Text>
+          </View>
+
+          <View style={s.grid}>
+            {[100, 150, 250, 350, 500, 750].map(ml => (
+              <TouchableOpacity key={ml} activeOpacity={0.65}
+                style={[s.mlCard, flash === ml && s.mlCardLit]}
+                onPress={() => addWater(ml)}>
+                <Text style={s.mlDrop}>💧</Text>
+                <Text style={[s.mlVal, flash === ml && { color: BLUE }]}>{ml}</Text>
+                <Text style={s.mlU}>ml</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={s.sumRow}>
+            {[
+              { v: today.toLocaleString(), l: 'ml hoy' },
+              { v: String(log.length),     l: 'vasos' },
+              { v: remaining.toLocaleString(), l: 'ml faltan', c: done ? GREEN : remaining > goal*0.5 ? RED : AMBER },
+            ].map((it, i) => (
+              <View key={i} style={s.sumCell}>
+                <Text style={[s.sumVal, it.c && { color: it.c }]}>{it.v}</Text>
+                <Text style={s.sumLbl}>{it.l}</Text>
+              </View>
+            ))}
+          </View>
+
+          {flash && <View style={s.pill}><Text style={s.pillTxt}>+{flash} ml registrados ✓</Text></View>}
+        </View>
+      );
+
+      // META ─────────────────────────────────────────────────────────────────
+      case 2: {
+        // ETA: pace so far today
+        let etaStr = null;
+        if (today > 0 && !done) {
+          const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
+          const elapsed_ms = Date.now() - startOfDay.getTime();
+          if (elapsed_ms > 0) {
+            const rate    = today / elapsed_ms; // ml/ms
+            const msLeft  = remaining / rate;
+            const etaMs   = Date.now() + msLeft;
+            const etaD    = new Date(etaMs);
+            if (msLeft < 18 * 3600000) {
+              etaStr = `${String(etaD.getHours()).padStart(2,'0')}:${String(etaD.getMinutes()).padStart(2,'0')}`;
+            }
+          }
+        }
+        return (
+          <View style={s.tab}>
+            <View style={s.sHead}>
+              <Text style={s.sTag}>META DIARIA</Text>
+              <Text style={s.sSub}>Ajusta tu objetivo de hidratación</Text>
+            </View>
+
+            <View style={s.adjCard}>
+              <TouchableOpacity style={s.adjBtn} onPress={() => changeGoal(-250)} activeOpacity={0.7}>
+                <Text style={s.adjBtnTxt}>−</Text>
+              </TouchableOpacity>
+              <View style={s.adjCenter}>
+                <Text style={s.adjBig}>{(goal/1000).toFixed(1)}</Text>
+                <Text style={s.adjLitros}>litros</Text>
+                <Text style={s.adjMl}>{goal.toLocaleString()} ml / día</Text>
+              </View>
+              <TouchableOpacity style={s.adjBtn} onPress={() => changeGoal(+250)} activeOpacity={0.7}>
+                <Text style={s.adjBtnTxt}>+</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={s.presets}>
+              {[{ l: 'Mínimo', v: 1500 }, { l: 'Recomendado', v: 2000 }, { l: 'Activo', v: 3000 }].map(p => (
+                <TouchableOpacity key={p.v} activeOpacity={0.7}
+                  style={[s.preset, goal === p.v && s.presetOn]}
+                  onPress={() => setGoalPreset(p.v)}>
+                  <Text style={[s.presetL, goal === p.v && { color: BLUE }]}>{p.l}</Text>
+                  <Text style={[s.presetV, goal === p.v && { color: BLUE }]}>{(p.v/1000).toFixed(1)}L</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {etaStr && (
+              <View style={s.etaCard}>
+                <Text style={s.etaIcon}>⏱</Text>
+                <Text style={s.etaTxt}>
+                  {'A este ritmo llegarás a tu meta a las '}
+                  <Text style={{ color: BLUE, fontWeight: '800' }}>{etaStr}</Text>
                 </Text>
               </View>
-            </View>
-            <Text style={s.goalLabel}>Meta: {goal} ml</Text>
-            {pct >= 1 && <Text style={s.badge}>¡Meta alcanzada! 🎉</Text>}
+            )}
           </View>
+        );
+      }
 
-          <TouchableOpacity style={s.mainBtn} onPress={() => addWater(250)}>
-            <Text style={s.mainBtnIcon}>💧</Text>
-            <Text style={s.mainBtnText}>+250 ml</Text>
-          </TouchableOpacity>
-        </View>
-      );
-
-      // ── 1: Registrar ───────────────────────────────────────────────────────
-      case 1: return (
-        <View style={s.tabContent}>
-          <Text style={s.sectionTitle}>REGISTRAR</Text>
-          <Text style={s.sectionSub}>Selecciona la cantidad de agua</Text>
-          <View style={s.grid2}>
-            {[150, 250, 350, 500].map((ml) => (
-              <TouchableOpacity key={ml} style={s.mlBtn} onPress={() => addWater(ml)}>
-                <Text style={s.mlBtnIcon}>💧</Text>
-                <Text style={s.mlBtnMl}>{ml}</Text>
-                <Text style={s.mlBtnUnit}>ml</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <View style={s.statusRow}>
-            <View style={s.statusItem}>
-              <Text style={s.statusVal}>{today}</Text>
-              <Text style={s.statusLbl}>ml hoy</Text>
-            </View>
-            <View style={s.statusItem}>
-              <Text style={s.statusVal}>{log.length}</Text>
-              <Text style={s.statusLbl}>registros</Text>
-            </View>
-            <View style={s.statusItem}>
-              <Text style={[s.statusVal, { color: goal - today > 0 ? AMBER : GREEN }]}>
-                {Math.max(0, goal - today)}
-              </Text>
-              <Text style={s.statusLbl}>ml faltan</Text>
-            </View>
-          </View>
-        </View>
-      );
-
-      // ── 2: Meta ────────────────────────────────────────────────────────────
-      case 2: return (
-        <View style={s.tabContent}>
-          <Text style={s.sectionTitle}>META DIARIA</Text>
-          <Text style={s.sectionSub}>Ajusta tu objetivo de hidratación</Text>
-          <View style={s.goalCard}>
-            <TouchableOpacity style={s.goalBtn} onPress={() => changeGoal(-250)}>
-              <Text style={s.goalBtnText}>−</Text>
-            </TouchableOpacity>
-            <View style={{ alignItems: 'center' }}>
-              <Text style={s.goalBig}>{goal}</Text>
-              <Text style={s.goalUnit}>ml / día</Text>
-            </View>
-            <TouchableOpacity style={s.goalBtn} onPress={() => changeGoal(+250)}>
-              <Text style={s.goalBtnText}>+</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={s.referenceList}>
-            {[
-              { label: 'Mínimo', val: 1500 },
-              { label: 'Recomendado', val: 2000 },
-              { label: 'Activo', val: 3000 },
-            ].map((r) => (
-              <TouchableOpacity
-                key={r.val}
-                style={[s.refBtn, goal === r.val && s.refBtnActive]}
-                onPress={() => { setGoal(r.val); save(log, r.val, history, lastDrink); }}
-              >
-                <Text style={[s.refLabel, goal === r.val && { color: BLUE }]}>{r.label}</Text>
-                <Text style={[s.refVal,   goal === r.val && { color: BLUE }]}>{r.val} ml</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      );
-
-      // ── 3: Historial ───────────────────────────────────────────────────────
+      // REGISTRO ─────────────────────────────────────────────────────────────
       case 3: return (
-        <View style={s.tabContent}>
-          <View style={s.histHeader}>
-            <Text style={s.sectionTitle}>HISTORIAL HOY</Text>
-            <TouchableOpacity onPress={clearToday}>
-              <Text style={s.clearBtn}>Borrar</Text>
-            </TouchableOpacity>
+        <View style={[s.tab, { paddingBottom: 0 }]}>
+          <View style={s.regHead}>
+            <View>
+              <Text style={s.sTag}>REGISTRO HOY</Text>
+              <Text style={s.sSub}>{log.length} entradas · {today.toLocaleString()} ml</Text>
+            </View>
+            {log.length > 0 && (
+              <TouchableOpacity style={s.delBtn} onPress={clearToday} activeOpacity={0.7}>
+                <Text style={s.delTxt}>Borrar todo</Text>
+              </TouchableOpacity>
+            )}
           </View>
+
           {log.length === 0 ? (
             <View style={s.empty}>
-              <Text style={s.emptyIcon}>🫙</Text>
-              <Text style={s.emptyText}>Sin registros hoy</Text>
+              <Text style={s.emptyGlyph}>🫙</Text>
+              <Text style={s.emptyTitle}>Sin registros hoy</Text>
+              <Text style={s.emptySub}>Toca Agregar para registrar</Text>
+              <TouchableOpacity style={s.emptyBtn} onPress={() => setTab(1)}>
+                <Text style={s.emptyBtnTxt}>Ir a Agregar →</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <FlatList
               data={log}
-              keyExtractor={(e) => String(e.id)}
+              keyExtractor={e => String(e.id)}
               style={{ flex: 1, width: '100%' }}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 12 }}
               renderItem={({ item }) => (
                 <View style={s.logRow}>
-                  <Text style={s.logTime}>{formatTime(item.ts)}</Text>
-                  <View style={s.logBar}>
-                    <View style={[s.logFill, { width: `${Math.min((item.ml / 500) * 100, 100)}%` }]} />
+                  <Text style={s.logTime}>{fmtTime(item.ts)}</Text>
+                  <View style={s.logTrack}>
+                    <View style={[s.logBar, { width: `${Math.min((item.ml/750)*100,100)}%` }]} />
                   </View>
                   <Text style={s.logMl}>+{item.ml} ml</Text>
                 </View>
@@ -349,284 +426,236 @@ export default function HydrationScreen() {
         </View>
       );
 
-      // ── 4: Gráfica ────────────────────────────────────────────────────────
+      // SEMANA ───────────────────────────────────────────────────────────────
       case 4: {
-        const maxBar = Math.max(goal, ...keys7.map((k) => history[k] || 0));
-        const barH   = 100;
+        const vals   = keys7.map(k => history[k] || 0);
+        const maxVal = Math.max(...vals, goal, 1);
+        const BAR_H  = 120;
+        const avg    = Math.round(vals.reduce((a,b) => a+b, 0) / 7);
+        const metas  = vals.filter(v => v >= goal).length;
+        const best   = Math.max(...vals);
+        const today_ = todayKey();
         return (
-          <View style={s.tabContent}>
-            <Text style={s.sectionTitle}>ÚLTIMOS 7 DÍAS</Text>
-            <View style={s.chartArea}>
-              {keys7.map((k) => (
-                <Bar
-                  key={k}
-                  value={history[k] || 0}
-                  goal={goal}
-                  label={k}
-                  maxH={barH}
-                />
+          <View style={s.tab}>
+            <View style={s.sHead}>
+              <Text style={s.sTag}>ÚLTIMOS 7 DÍAS</Text>
+              <Text style={s.sSub}>Progreso semanal de hidratación</Text>
+            </View>
+
+            <View style={[s.chartBox, { height: BAR_H + 40 }]}>
+              {keys7.map((k, i) => {
+                const val  = vals[i];
+                const h    = Math.max(val > 0 ? 6 : 0, Math.round((val/maxVal)*BAR_H));
+                const c    = val >= goal ? GREEN : val >= goal*0.5 ? BLUE : val > 0 ? DBLUE : LINE;
+                const isT  = k === today_;
+                const day  = k.slice(8);
+                return (
+                  <View key={k} style={s.barCol}>
+                    <Text style={s.barValTxt}>
+                      {val >= 1000 ? `${(val/1000).toFixed(1)}L` : val > 0 ? `${val}` : ''}
+                    </Text>
+                    <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                      <View style={[s.barFill, { height: h, backgroundColor: c }]} />
+                    </View>
+                    <Text style={[s.barDay, isT && { color: BLUE, fontWeight: '900' }]}>{day}</Text>
+                    {isT && <View style={s.barDot} />}
+                  </View>
+                );
+              })}
+            </View>
+
+            <View style={s.legend}>
+              {[[GREEN,'Meta alcanzada'],[BLUE,'En progreso'],[LINE,'Sin registro']].map(([c,l]) => (
+                <View key={l} style={s.legendItem}>
+                  <View style={[s.legendDot, { backgroundColor: c }]} />
+                  <Text style={s.legendTxt}>{l}</Text>
+                </View>
               ))}
             </View>
-            <View style={s.chartLegend}>
-              <View style={[s.dot, { backgroundColor: GREEN }]} />
-              <Text style={s.legendText}>Meta alcanzada</Text>
-              <View style={[s.dot, { backgroundColor: BLUE }]} />
-              <Text style={s.legendText}>En progreso</Text>
-              <View style={[s.dot, { backgroundColor: MUTED }]} />
-              <Text style={s.legendText}>Sin registros</Text>
-            </View>
+
             <View style={s.statsRow}>
-              <View style={s.statCard}>
-                <Text style={s.statVal}>
-                  {keys7.filter((k) => (history[k] || 0) >= goal).length}
-                </Text>
-                <Text style={s.statLbl}>metas{'\n'}alcanzadas</Text>
-              </View>
-              <View style={s.statCard}>
-                <Text style={s.statVal}>
-                  {Math.round(keys7.reduce((s, k) => s + (history[k] || 0), 0) / 7)}
-                </Text>
-                <Text style={s.statLbl}>ml{'\n'}promedio</Text>
-              </View>
+              {[
+                { v: avg >= 1000 ? `${(avg/1000).toFixed(1)}L` : `${avg}ml`, l: 'promedio\ndiario' },
+                { v: `${metas}/7`, l: 'metas\nlogradas', c: metas >= 5 ? GREEN : metas >= 3 ? BLUE : SUB },
+                { v: best >= 1000 ? `${(best/1000).toFixed(1)}L` : `${best}ml`, l: 'mejor\ndía' },
+              ].map((st, i) => (
+                <View key={i} style={s.statCard}>
+                  <Text style={[s.statV, st.c && { color: st.c }]}>{st.v}</Text>
+                  <Text style={s.statL}>{st.l}</Text>
+                </View>
+              ))}
             </View>
           </View>
         );
       }
 
-      // ── 5: Alerta ─────────────────────────────────────────────────────────
-      case 5: return (
-        <View style={s.tabContent}>
-          <Text style={s.sectionTitle}>RECORDATORIO</Text>
-          <View style={[s.alertCard, { borderColor: alertOn ? RED : alertMin != null && alertMin >= 30 ? AMBER : BLUE }]}>
-            <Text style={s.alertIcon}>
-              {lastDrink == null ? '😴' : alertOn ? '🚨' : alertMin >= 30 ? '⚠️' : '✅'}
-            </Text>
-            {lastDrink == null ? (
-              <Text style={s.alertMsg}>Sin registros hoy</Text>
-            ) : (
-              <>
-                <Text style={[s.alertTime, { color: alertOn ? RED : alertMin >= 30 ? AMBER : GREEN }]}>
-                  {formatElapsed(elapsed)}
-                </Text>
-                <Text style={s.alertSub}>desde el último vaso</Text>
-                {alertOn && (
-                  <Text style={[s.alertWarn, { color: RED }]}>¡Bebe agua ahora!</Text>
-                )}
-                {!alertOn && alertMin >= 30 && (
-                  <Text style={[s.alertWarn, { color: AMBER }]}>Pronto toca hidratarse</Text>
-                )}
-              </>
-            )}
-          </View>
-          <View style={s.alertInfo}>
-            <View style={s.alertRow}>
-              <View style={[s.dot, { backgroundColor: GREEN }]} />
-              <Text style={s.alertInfoText}>0–29 min — Hidratado</Text>
-            </View>
-            <View style={s.alertRow}>
-              <View style={[s.dot, { backgroundColor: AMBER }]} />
-              <Text style={s.alertInfoText}>30–59 min — Bebe pronto</Text>
-            </View>
-            <View style={s.alertRow}>
-              <View style={[s.dot, { backgroundColor: RED }]} />
-              <Text style={s.alertInfoText}>60+ min — ¡Bebe ya!</Text>
-            </View>
-          </View>
-          <TouchableOpacity style={s.mainBtn} onPress={() => { addWater(250); setTab(0); }}>
-            <Text style={s.mainBtnIcon}>💧</Text>
-            <Text style={s.mainBtnText}>Registrar ahora</Text>
-          </TouchableOpacity>
-        </View>
-      );
-
       default: return null;
     }
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={s.root}>
-      {/* Banner de error */}
-      {error && (
-        <View style={s.errorBanner}>
-          <Text style={s.errorText}>{error}</Text>
+      {/* Header */}
+      <View style={[s.header, { paddingTop: TOP }]}>
+        <View>
+          <Text style={s.hTitle}>HIDRATACIÓN</Text>
+          <Text style={s.hSub}>{pctN}% completado · {today.toLocaleString()} ml</Text>
         </View>
+        <MiniRing pct={pct} done={done} />
+      </View>
+
+      {error && (
+        <View style={s.errBanner}><Text style={s.errTxt}>{error}</Text></View>
       )}
 
-      {/* Contenedor tipo wearable */}
-      <View style={[s.watch, { width: wSize, minHeight: wSize }]}>
-        {/* Cabecera */}
-        <View style={s.watchHeader}>
-          <Text style={s.watchIcon}>💧</Text>
-          <Text style={s.watchTitle}>HIDRATACIÓN</Text>
-          {alertOn && <Text style={s.alertDot}>●</Text>}
-        </View>
+      {/* Content */}
+      <View style={{ flex: 1, alignItems: 'center' }}>
+        <View style={{ width: W, flex: 1 }}>{content()}</View>
+      </View>
 
-        {/* Contenido del tab */}
-        <View style={{ flex: 1, width: '100%' }}>
-          {renderTab()}
-        </View>
-
-        {/* Barra de tabs */}
-        <View style={s.tabBar}>
-          {TABS.map((t, i) => (
-            <TouchableOpacity key={i} style={s.tabItem} onPress={() => setTab(i)}>
-              <Text style={[s.tabIcon, tab === i && s.tabIconActive]}>{t.icon}</Text>
-              <Text style={[s.tabLabel, tab === i && s.tabLabelActive]}>{t.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+      {/* Tab bar */}
+      <View style={[s.tabBar, { paddingBottom: BOT }]}>
+        {TABS.map((t, i) => (
+          <TouchableOpacity key={i} style={s.tabBtn} onPress={() => setTab(i)} activeOpacity={0.8}>
+            {tab === i && <View style={s.tabLine} />}
+            <Text style={[s.tabIco, tab === i && s.tabIcoOn]}>{t.icon}</Text>
+            <Text style={[s.tabLbl, tab === i && s.tabLblOn]}>{t.label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
     </View>
   );
 }
 
-// ─── Estilos ──────────────────────────────────────────────────────────────────
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  root:        { flex: 1, backgroundColor: BG, alignItems: 'center', justifyContent: 'center' },
-  loading:     { color: TEXT, fontSize: 16 },
+  root:    { flex: 1, backgroundColor: BG },
+  loadTxt: { color: SUB, fontSize: 14, textAlign: 'center', marginTop: 120 },
 
-  errorBanner: { backgroundColor: '#2d0a0a', borderRadius: 8, padding: 10, marginBottom: 8, maxWidth: 300 },
-  errorText:   { color: RED, fontSize: 12, textAlign: 'center' },
-
-  watch: {
-    backgroundColor: CARD,
-    borderRadius: 28,
-    borderWidth: 2,
-    borderColor: '#0f2535',
-    overflow: 'hidden',
-    shadowColor: BLUE,
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-    elevation: 12,
-  },
-
-  watchHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10,
-    borderBottomWidth: 1, borderBottomColor: '#0a1e2c',
-  },
-  watchIcon:  { fontSize: 16 },
-  watchTitle: { flex: 1, color: BLUE, fontSize: 11, fontWeight: '900', letterSpacing: 4 },
-  alertDot:   { color: RED, fontSize: 10 },
-
-  tabContent: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 14, paddingVertical: 12, gap: 10,
-  },
-
-  // Dashboard
-  circleWrap:  { position: 'relative', alignItems: 'center', justifyContent: 'center' },
-  circleCenter:{ position: 'absolute', alignItems: 'center' },
-  circleMain:  { color: TEXT, fontSize: 30, fontWeight: '900', lineHeight: 32 },
-  circleSub:   { color: MUTED, fontSize: 11, fontWeight: '700', letterSpacing: 2 },
-  circlePct:   { fontSize: 13, fontWeight: '800', letterSpacing: 1, marginTop: 2 },
-  goalLabel:   { color: MUTED, fontSize: 10, letterSpacing: 2 },
-  badge:       { color: GREEN, fontSize: 11, fontWeight: '800', letterSpacing: 1, marginTop: 2 },
-
-  mainBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#0a2535', borderRadius: 14,
-    borderWidth: 1, borderColor: BLUE,
-    paddingVertical: 12, paddingHorizontal: 24, width: '100%',
-  },
-  mainBtnIcon: { fontSize: 18 },
-  mainBtnText: { color: BLUE, fontSize: 14, fontWeight: '900', letterSpacing: 2 },
-
-  // Registrar
-  sectionTitle: { color: BLUE, fontSize: 10, fontWeight: '900', letterSpacing: 5 },
-  sectionSub:   { color: MUTED, fontSize: 9, letterSpacing: 1, marginTop: -4 },
-
-  grid2: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 8,
-    justifyContent: 'center', width: '100%',
-  },
-  mlBtn: {
-    width: '44%', backgroundColor: '#0a1e2c', borderRadius: 12,
-    borderWidth: 1, borderColor: '#0f2a3a',
-    alignItems: 'center', paddingVertical: 14, gap: 2,
-  },
-  mlBtnIcon: { fontSize: 20 },
-  mlBtnMl:   { color: TEXT, fontSize: 20, fontWeight: '900', lineHeight: 22 },
-  mlBtnUnit: { color: MUTED, fontSize: 9, letterSpacing: 2 },
-
-  statusRow:  { flexDirection: 'row', gap: 8, width: '100%' },
-  statusItem: { flex: 1, backgroundColor: '#070f16', borderRadius: 10, alignItems: 'center', paddingVertical: 8 },
-  statusVal:  { color: TEXT, fontSize: 16, fontWeight: '900' },
-  statusLbl:  { color: MUTED, fontSize: 8, letterSpacing: 1, marginTop: 1 },
-
-  // Meta
-  goalCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 16,
-    backgroundColor: '#070f16', borderRadius: 18,
-    paddingVertical: 20, paddingHorizontal: 24, width: '100%',
-  },
-  goalBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#0a2535', borderWidth: 1, borderColor: BLUE,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  goalBtnText: { color: BLUE, fontSize: 22, fontWeight: '300', lineHeight: 24 },
-  goalBig:     { color: TEXT, fontSize: 32, fontWeight: '900' },
-  goalUnit:    { color: MUTED, fontSize: 10, letterSpacing: 2 },
-
-  referenceList: { gap: 6, width: '100%' },
-  refBtn: {
+  // Header
+  header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#070f16', borderRadius: 10,
-    borderWidth: 1, borderColor: '#0a1e2c',
-    paddingVertical: 10, paddingHorizontal: 14,
+    paddingHorizontal: 20, paddingBottom: 14,
+    borderBottomWidth: 1, borderBottomColor: LINE,
+    backgroundColor: SURF,
   },
-  refBtnActive: { borderColor: BLUE },
-  refLabel:     { color: MUTED, fontSize: 11, fontWeight: '700' },
-  refVal:       { color: MUTED, fontSize: 11, fontWeight: '700' },
+  hTitle: { color: BLUE, fontSize: 10, fontWeight: '900', letterSpacing: 6 },
+  hSub:   { color: MUTED, fontSize: 11, marginTop: 3 },
 
-  // Historial
-  histHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
-  clearBtn:    { color: RED, fontSize: 10, fontWeight: '700', letterSpacing: 2 },
-  empty:       { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  emptyIcon:   { fontSize: 36 },
-  emptyText:   { color: MUTED, fontSize: 12, letterSpacing: 2 },
+  errBanner: { margin: 12, backgroundColor: '#1a0505', borderRadius: 10, padding: 10 },
+  errTxt:    { color: RED, fontSize: 12, textAlign: 'center' },
 
-  logRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#0a1e2c' },
-  logTime:  { color: MUTED, fontSize: 10, fontWeight: '700', width: 36 },
-  logBar:   { flex: 1, height: 4, backgroundColor: DIM, borderRadius: 2, overflow: 'hidden' },
-  logFill:  { height: '100%', backgroundColor: BLUE, borderRadius: 2 },
-  logMl:    { color: TEXT, fontSize: 10, fontWeight: '800', width: 52, textAlign: 'right' },
-
-  // Gráfica
-  chartArea:   { flexDirection: 'row', alignItems: 'flex-end', gap: 6, paddingHorizontal: 4 },
-  chartLegend: { flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' },
-  dot:         { width: 7, height: 7, borderRadius: 4 },
-  legendText:  { color: MUTED, fontSize: 8 },
-  statsRow:    { flexDirection: 'row', gap: 8, width: '100%' },
-  statCard:    { flex: 1, backgroundColor: '#070f16', borderRadius: 12, alignItems: 'center', paddingVertical: 10 },
-  statVal:     { color: TEXT, fontSize: 22, fontWeight: '900' },
-  statLbl:     { color: MUTED, fontSize: 8, letterSpacing: 1, textAlign: 'center', marginTop: 2 },
-
-  // Alerta
-  alertCard: {
-    alignItems: 'center', gap: 6,
-    backgroundColor: '#070f16', borderRadius: 18,
-    borderWidth: 2, paddingVertical: 20, paddingHorizontal: 16, width: '100%',
+  // Tab content
+  tab: {
+    flex: 1, alignItems: 'center',
+    paddingHorizontal: 20, paddingTop: 20, gap: 14,
   },
-  alertIcon:     { fontSize: 32 },
-  alertTime:     { fontSize: 36, fontWeight: '900', letterSpacing: 2 },
-  alertSub:      { color: MUTED, fontSize: 10, letterSpacing: 2 },
-  alertMsg:      { color: MUTED, fontSize: 13, letterSpacing: 2 },
-  alertWarn:     { fontSize: 12, fontWeight: '900', letterSpacing: 2 },
-  alertInfo:     { gap: 6, width: '100%' },
-  alertRow:      { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  alertInfoText: { color: MUTED, fontSize: 10 },
 
-  // Tabs
-  tabBar: {
-    flexDirection: 'row',
-    borderTopWidth: 1, borderTopColor: '#0a1e2c',
-    backgroundColor: '#070d14',
-  },
-  tabItem:       { flex: 1, alignItems: 'center', paddingVertical: 8, gap: 2 },
-  tabIcon:       { fontSize: 16, opacity: 0.35 },
-  tabIconActive: { opacity: 1 },
-  tabLabel:      { color: MUTED, fontSize: 7, fontWeight: '700', letterSpacing: 1 },
-  tabLabelActive:{ color: BLUE },
+  // Section header
+  sHead: { alignSelf: 'flex-start', gap: 3 },
+  sTag:  { color: BLUE, fontSize: 9, fontWeight: '900', letterSpacing: 5 },
+  sSub:  { color: MUTED, fontSize: 11 },
+
+  // HOY — ring
+  dateStr:  { color: MUTED, fontSize: 12, letterSpacing: 2, alignSelf: 'flex-start' },
+  ringWrap: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  ringInner:{ position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  ringNum:  { color: TEXT, fontSize: 46, fontWeight: '900', lineHeight: 48 },
+  ringUnit: { color: SUB, fontSize: 11, fontWeight: '700', letterSpacing: 3, marginTop: 2 },
+  ringPct:  { fontSize: 15, fontWeight: '800', letterSpacing: 1, marginTop: 6 },
+  caption:  { color: SUB, fontSize: 12, letterSpacing: 1 },
+
+  // Alert strip
+  strip:    { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, width: '100%' },
+  stripDot: { width: 6, height: 6, borderRadius: 3 },
+  stripTxt: { fontSize: 12, fontWeight: '600', flex: 1 },
+
+  // Quick add
+  quickRow: { flexDirection: 'row', gap: 10, width: '100%' },
+  quickBtn: { flex: 1, alignItems: 'center', paddingVertical: 14, backgroundColor: CARD, borderRadius: 14, borderWidth: 1, borderColor: LINE, gap: 2 },
+  quickBtnLit: { borderColor: BLUE, backgroundColor: `${BLUE}12` },
+  quickDrop: { fontSize: 20 },
+  quickVal:  { color: TEXT, fontSize: 18, fontWeight: '900', lineHeight: 20 },
+  quickU:    { color: MUTED, fontSize: 9, letterSpacing: 2 },
+
+  // Feedback pill
+  pill:    { backgroundColor: `${GREEN}14`, borderRadius: 20, borderWidth: 1, borderColor: `${GREEN}40`, paddingVertical: 8, paddingHorizontal: 18 },
+  pillTxt: { color: GREEN, fontSize: 12, fontWeight: '700', letterSpacing: 1 },
+
+  // AGREGAR — grid
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, width: '100%' },
+  mlCard:    { width: '30.5%', alignItems: 'center', paddingVertical: 18, backgroundColor: CARD, borderRadius: 16, borderWidth: 1, borderColor: LINE, gap: 4 },
+  mlCardLit: { borderColor: BLUE, backgroundColor: `${BLUE}12` },
+  mlDrop:    { fontSize: 22 },
+  mlVal:     { color: TEXT, fontSize: 22, fontWeight: '900', lineHeight: 24 },
+  mlU:       { color: MUTED, fontSize: 9, letterSpacing: 2 },
+
+  sumRow:  { flexDirection: 'row', backgroundColor: CARD, borderRadius: 16, borderWidth: 1, borderColor: LINE, width: '100%' },
+  sumCell: { flex: 1, alignItems: 'center', paddingVertical: 14 },
+  sumVal:  { color: TEXT, fontSize: 20, fontWeight: '900' },
+  sumLbl:  { color: MUTED, fontSize: 9, letterSpacing: 2, marginTop: 3 },
+
+  // META
+  adjCard:   { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: CARD, borderRadius: 20, borderWidth: 1, borderColor: LINE, paddingVertical: 24, paddingHorizontal: 20, width: '100%' },
+  adjBtn:    { width: 48, height: 48, borderRadius: 24, backgroundColor: SURF, borderWidth: 1, borderColor: LINE, alignItems: 'center', justifyContent: 'center' },
+  adjBtnTxt: { color: BLUE, fontSize: 26, fontWeight: '300', lineHeight: 30 },
+  adjCenter: { flex: 1, alignItems: 'center' },
+  adjBig:    { color: TEXT, fontSize: 54, fontWeight: '900', lineHeight: 56 },
+  adjLitros: { color: SUB, fontSize: 11, letterSpacing: 3 },
+  adjMl:     { color: MUTED, fontSize: 11, marginTop: 4 },
+
+  presets:  { flexDirection: 'row', gap: 8, width: '100%' },
+  preset:   { flex: 1, alignItems: 'center', paddingVertical: 12, backgroundColor: CARD, borderRadius: 12, borderWidth: 1, borderColor: LINE },
+  presetOn: { borderColor: BLUE, backgroundColor: `${BLUE}10` },
+  presetL:  { color: MUTED, fontSize: 10, fontWeight: '800' },
+  presetV:  { color: SUB, fontSize: 13, fontWeight: '900', marginTop: 2 },
+
+  etaCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: CARD, borderRadius: 12, borderWidth: 1, borderColor: LINE, paddingVertical: 12, paddingHorizontal: 14, width: '100%' },
+  etaIcon: { fontSize: 16 },
+  etaTxt:  { color: MUTED, fontSize: 12, flex: 1, lineHeight: 18 },
+
+  // REGISTRO
+  regHead:  { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', width: '100%', marginBottom: 4 },
+  delBtn:   { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: `${RED}10`, borderRadius: 8, borderWidth: 1, borderColor: `${RED}30` },
+  delTxt:   { color: RED, fontSize: 10, fontWeight: '800', letterSpacing: 2 },
+  logRow:   { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: LINE },
+  logTime:  { color: MUTED, fontSize: 11, fontWeight: '700', width: 42 },
+  logTrack: { flex: 1, height: 5, backgroundColor: GHOST, borderRadius: 3, overflow: 'hidden' },
+  logBar:   { height: '100%', backgroundColor: BLUE, borderRadius: 3 },
+  logMl:    { color: TEXT, fontSize: 12, fontWeight: '800', width: 62, textAlign: 'right' },
+
+  empty:       { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  emptyGlyph:  { fontSize: 52, marginBottom: 4 },
+  emptyTitle:  { color: TEXT, fontSize: 17, fontWeight: '700' },
+  emptySub:    { color: MUTED, fontSize: 12 },
+  emptyBtn:    { marginTop: 12, paddingVertical: 10, paddingHorizontal: 24, borderRadius: 10, borderWidth: 1, borderColor: BLUE, backgroundColor: `${BLUE}10` },
+  emptyBtnTxt: { color: BLUE, fontSize: 12, fontWeight: '800', letterSpacing: 2 },
+
+  // SEMANA — chart
+  chartBox: { flexDirection: 'row', alignItems: 'flex-end', gap: 5, width: '100%', paddingBottom: 24 },
+  barCol:   { flex: 1, alignItems: 'center', gap: 3 },
+  barValTxt:{ color: MUTED, fontSize: 7, fontWeight: '700', minHeight: 12 },
+  barFill:  { width: '100%', borderRadius: 5 },
+  barDay:   { color: MUTED, fontSize: 9, fontWeight: '700', marginTop: 2 },
+  barDot:   { width: 4, height: 4, borderRadius: 2, backgroundColor: BLUE },
+
+  legend:     { flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center' },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendDot:  { width: 8, height: 8, borderRadius: 4 },
+  legendTxt:  { color: MUTED, fontSize: 10 },
+
+  statsRow: { flexDirection: 'row', gap: 8, width: '100%' },
+  statCard: { flex: 1, backgroundColor: CARD, borderRadius: 14, borderWidth: 1, borderColor: LINE, alignItems: 'center', paddingVertical: 14, gap: 4 },
+  statV:    { color: TEXT, fontSize: 18, fontWeight: '900' },
+  statL:    { color: MUTED, fontSize: 8, letterSpacing: 1, textAlign: 'center' },
+
+  // Tab bar
+  tabBar: { flexDirection: 'row', backgroundColor: SURF, borderTopWidth: 1, borderTopColor: LINE },
+  tabBtn: { flex: 1, alignItems: 'center', paddingTop: 10, paddingBottom: 4, position: 'relative' },
+  tabLine:  { position: 'absolute', top: 0, width: 24, height: 2, backgroundColor: BLUE, borderRadius: 1 },
+  tabIco:   { fontSize: 18, opacity: 0.28 },
+  tabIcoOn: { opacity: 1 },
+  tabLbl:   { color: MUTED, fontSize: 7, fontWeight: '800', letterSpacing: 1, marginTop: 3 },
+  tabLblOn: { color: BLUE },
 });
